@@ -1,0 +1,1338 @@
+/*
+ * Talk-Flow — LG전자 Look & Feel
+ *
+ * 팔레트 근거 (lg.com/global/our-identity/color):
+ *   Heritage Red  #A50034  (PMS 207C) — 주 브랜드 색
+ *   Active Red    #FD312E  — 2023 리브랜드의 밝은 레드. 활성/녹음 상태에 사용
+ *   Warm Grey     #F0ECE4  (PMS Cool Gray 1 C) — 면 색
+ *   LG Grey       #6B6B6B  (PMS 431 C) — 보조 텍스트
+ *   White / Black
+ *
+ * 성공 상태에는 초록을 쓰지 않고 중립(검정/그레이) + 체크로 표현해 팔레트를 유지한다.
+ * 경고만 예외적으로 웜 오커를 써서 경고/오류를 색으로도 구분한다.
+ */
+
+:root {
+  /* LG 계열 뉴트럴: 차가운 회색이 아닌 웜 그레이 계열 */
+  --bg: #f7f5f2;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f0ece4;
+  --border: #e3ddd3;
+  --border-strong: #cbc4b8;
+  --text: #0d0d0d;
+  --text-dim: #6b6b6b;
+  --text-faint: #9a948b;
+
+  --accent: #a50034;
+  --accent-text: #ffffff;
+  --accent-soft: #f7e7ec;
+  --accent-bright: #fd312e;
+
+  --live: #fd312e;
+  --busy: #8a6100;
+  --warn: #8a6100;
+  --warn-soft: #fdf6e6;
+  --error: #a50034;
+  --error-soft: #f9e9ee;
+  --ok: #0d0d0d;
+
+  --in-bg: #ffffff;
+  --out-bg: #f0ece4;
+  --shadow: 0 1px 2px rgb(13 13 13 / 6%), 0 6px 18px rgb(13 13 13 / 5%);
+
+  --fs-base: 13px;
+  --fs-entry: 14px;
+  --gap: 12px;
+  /* LG 디지털 디자인은 큰 라운드를 쓰지 않는다 */
+  --radius: 4px;
+}
+
+:root[data-theme='dark'] {
+  --bg: #121212;
+  --bg-raised: #1c1c1c;
+  --bg-sunken: #0a0a0a;
+  --border: #2e2b28;
+  --border-strong: #443f3a;
+  --text: #f2efea;
+  --text-dim: #a8a29a;
+  --text-faint: #726c64;
+
+  /* Heritage Red는 검정 위에서 명도가 부족해 Active Red를 주 색으로 쓴다 */
+  --accent: #fd312e;
+  --accent-text: #1a0004;
+  --accent-soft: #3a1418;
+  --accent-bright: #ff5a57;
+
+  --live: #fd312e;
+  --busy: #d9a441;
+  --warn: #d9a441;
+  --warn-soft: #33280f;
+  --error: #ff6b68;
+  --error-soft: #3a1418;
+  --ok: #f2efea;
+
+  --in-bg: #1c1c1c;
+  --out-bg: #262220;
+  --shadow: 0 1px 2px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+:root[data-font-scale='0'] {
+  --fs-base: 12px;
+  --fs-entry: 12.5px;
+}
+:root[data-font-scale='1'] {
+  --fs-base: 13px;
+  --fs-entry: 14px;
+}
+:root[data-font-scale='2'] {
+  --fs-base: 14px;
+  --fs-entry: 16px;
+}
+:root[data-font-scale='3'] {
+  --fs-base: 15px;
+  --fs-entry: 18.5px;
+}
+
+:root[data-compact='true'] {
+  --gap: 7px;
+  --radius: 3px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  /*
+   * LG Smart / LG EI는 사내 라이선스 폰트로 앱에 번들할 수 없다.
+   * 설치되어 있으면 사용하고, 없으면 시스템 폰트로 폴백한다.
+   */
+  font-family:
+    'LG Smart', 'LGSmart', 'LG EI Text', 'LG EI Headline', 'Segoe UI Variable Text', 'Segoe UI',
+    'Malgun Gothic', system-ui, sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font-family: inherit;
+  font-size: 0.85em;
+}
+
+/* ------------------------------------------------------------- 레이아웃 */
+
+/*
+ * flex 컬럼을 쓴다. grid-template-rows로 고정하면 BannerBar가 null을 반환할 때
+ * 행 배정이 한 칸씩 밀려 입력창이 남는 공간을 전부 차지한다.
+ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app > .statusbar,
+.app > .banner,
+.app > .compose,
+.app > .usagebar {
+  flex: 0 0 auto;
+}
+
+.app > .conversation {
+  flex: 1 1 auto;
+}
+
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  color: var(--text-dim);
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------- 상태 바 */
+
+.statusbar {
+  padding: calc(var(--gap) * 0.7) var(--gap);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+/* ------------------------------------------------------------ LG 브랜드 */
+
+.brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.brand__wordmark {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 1.25em;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.brand__product {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.brand__divider {
+  width: 1px;
+  height: 15px;
+  margin: 0 2px;
+  background: var(--border-strong);
+  flex-shrink: 0;
+}
+
+.statusbar__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statusbar__row--meta {
+  margin-top: 6px;
+  font-size: 0.9em;
+}
+
+.statusbar__row--meta .select--compact {
+  max-width: 124px;
+  flex-shrink: 0;
+}
+
+.statusbar__row--meta .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar__spacer {
+  flex: 1;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 0.9em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.chip--live .chip__dot {
+  background: var(--live);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.chip--busy .chip__dot {
+  background: var(--busy);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+.chip--warn .chip__dot {
+  background: var(--warn);
+}
+.chip--error .chip__dot {
+  background: var(--error);
+}
+.chip--live {
+  color: var(--live);
+}
+.chip--warn {
+  color: var(--warn);
+}
+.chip--error {
+  color: var(--error);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.meter {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.meter__seg {
+  width: 5px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+
+.meter__seg.is-on {
+  background: var(--text-faint);
+  border-color: var(--text-faint);
+}
+
+.meter__seg.is-speech {
+  background: var(--live);
+  border-color: var(--live);
+}
+
+/* --------------------------------------------------------------- 버튼류 */
+
+.btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  letter-spacing: -0.01em;
+  background: var(--bg-raised);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-bright);
+  border-color: var(--accent-bright);
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.btn--danger {
+  border-color: var(--error);
+  color: var(--error);
+  background: transparent;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--error-soft);
+}
+
+.btn--icon {
+  padding: 4px 7px;
+  line-height: 1;
+}
+
+.btn--icon.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.btn--tiny {
+  padding: 2px 7px;
+  font-size: 0.85em;
+  border-radius: 3px;
+}
+
+.btn--block {
+  width: 100%;
+  padding: 9px;
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.input:focus,
+.select:focus,
+.compose__input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.select--compact {
+  width: auto;
+  max-width: 140px;
+}
+
+/* -------------------------------------------------------------- 배너 */
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px var(--gap);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92em;
+}
+
+.banner--error {
+  background: var(--error-soft);
+  color: var(--error);
+}
+.banner--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.banner--info {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.banner__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.banner__hint {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.banner__actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------- 대화 스레드 */
+
+.conversation {
+  position: relative;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.conversation__scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--gap) * 0.7);
+  scrollbar-width: thin;
+}
+
+.empty {
+  margin: auto 0;
+  padding: 8px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.empty__title {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty__hint {
+  margin: 0 0 8px;
+  font-size: 0.94em;
+  line-height: 1.6;
+}
+
+.entry {
+  max-width: 92%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--in-bg);
+  box-shadow: var(--shadow);
+}
+
+.entry--in {
+  align-self: flex-start;
+  border-left: 2px solid var(--border-strong);
+}
+
+.entry--out {
+  align-self: flex-end;
+  background: var(--out-bg);
+  /* 내 발화는 브랜드 레드 스트라이프로 구분한다 (색상만이 아니라 위치·라벨도 함께) */
+  border-right: 2px solid var(--accent);
+}
+
+.entry__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 0.82em;
+  color: var(--text-dim);
+}
+
+.entry__who {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.entry__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.entry__source {
+  margin: 0;
+  font-size: var(--fs-entry);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.entry--in .entry__source {
+  font-weight: 500;
+}
+
+.entry__translated {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--border-strong);
+}
+
+.entry__translated p {
+  flex: 1;
+  margin: 0;
+  font-size: var(--fs-entry);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.entry--in .entry__translated p {
+  color: var(--text-dim);
+}
+
+.entry--out .entry__translated p {
+  font-weight: 600;
+}
+
+.entry__placeholder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.entry__placeholder--sub {
+  margin-top: 4px;
+  font-size: 0.9em;
+}
+
+.entry__error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  color: var(--error);
+  font-size: 0.9em;
+}
+
+.entry__review {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 0.88em;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: blink 1.2s infinite;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font-size: 0.92em;
+  white-space: nowrap;
+}
+
+.badge--warn {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.badge--error {
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-soft);
+}
+
+.badge--ok {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: transparent;
+}
+
+.jump {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 13px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+/* ------------------------------------------------------------- 입력 영역 */
+
+.compose {
+  display: flex;
+  gap: 7px;
+  padding: calc(var(--gap) * 0.7) var(--gap);
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.compose__input {
+  flex: 1;
+  height: 54px;
+  min-height: 40px;
+  max-height: 140px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg);
+  resize: vertical;
+  font-size: var(--fs-entry);
+}
+
+.compose__side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 66px;
+}
+
+.compose__count {
+  font-size: 0.8em;
+  color: var(--text-faint);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.compose__count.is-over {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.compose__busy {
+  font-size: 0.8em;
+  color: var(--busy);
+  text-align: center;
+}
+
+/* --------------------------------------------------------- 사용량 미터 */
+
+.usagebar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px var(--gap);
+  border-top: 1px solid var(--border);
+  background: var(--bg-sunken);
+  font-size: 0.83em;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.usagebar__spacer {
+  flex: 1;
+}
+
+.sep {
+  color: var(--text-faint);
+}
+
+:root[data-compact='true'] .usagebar {
+  font-size: 0.78em;
+}
+
+/* 푸터의 제공자 전환 셀렉트 */
+.provswitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.provswitch__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.provswitch__dot.is-ok {
+  background: var(--ok);
+}
+
+.provswitch__dot.is-warn {
+  background: var(--warn);
+}
+
+.provswitch__select {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 1px 2px;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.provswitch__select:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+/* 설정 화면의 제공자 선택 카드 */
+.providers {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.providers__card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.providers__card:hover {
+  background: var(--bg-sunken);
+}
+
+.providers__card.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.providers__radio {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.providers__card.is-active .providers__radio {
+  border-color: var(--accent);
+  background:
+    radial-gradient(circle, var(--accent) 0 45%, transparent 46%);
+}
+
+.providers__name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.providers__card.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.providers__card.is-disabled:hover {
+  background: var(--bg-raised);
+}
+
+.modellist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.modellist li.muted {
+  padding: 5px 8px;
+  font-size: 0.85em;
+}
+
+.modellist__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.modellist__item:hover {
+  background: var(--bg-raised);
+}
+
+.modellist__item.is-active {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.modellist__item code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.modellist__item .muted {
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.provswitch__arrow {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------- 동의 */
+
+.consent {
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px;
+  background: var(--bg);
+}
+
+.consent__card {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow);
+}
+
+.consent__card h1 {
+  margin: 0 0 10px;
+  font-size: 1.35em;
+}
+
+.consent__lead {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.consent__list {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+.consent__list li {
+  margin-bottom: 6px;
+}
+
+.consent__warn {
+  padding: 9px 11px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  line-height: 1.6;
+}
+
+.consent__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------- 설정 */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  background: rgb(0 0 0 / 45%);
+  backdrop-filter: blur(1.5px);
+  z-index: 20;
+}
+
+.modal__panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  margin: auto;
+  max-height: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px var(--gap);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  /* 본문이 길어도 머리말이 눌리지 않게 한다 */
+  flex: 0 0 auto;
+}
+
+.modal__head h2 {
+  margin: 0;
+  font-size: 1.05em;
+}
+
+.modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--gap);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 5px var(--gap) 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  overflow-x: auto;
+  scrollbar-width: none;
+  /*
+   * flex 컬럼(.modal__panel) 안에서 본문이 길면 flex-shrink 기본값 1 때문에
+   * 이 줄이 눌린다. overflow-x:auto는 overflow-y도 auto로 만들어 눌린 만큼
+   * 탭 글자가 잘려 보인다. 축소를 막고 최소 높이를 보장한다.
+   */
+  flex: 0 0 auto;
+}
+
+/* Chromium은 scrollbar-width를 무시하므로 별도로 숨긴다 */
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs__tab {
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tabs__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  font-weight: 600;
+}
+
+.field__hint {
+  font-size: 0.88em;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.field__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row .input,
+.row .select {
+  flex: 1;
+  min-width: 120px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 420px) {
+  .grid2,
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  cursor: pointer;
+  line-height: 1.45;
+}
+
+.numfield {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.88em;
+  color: var(--text-dim);
+}
+
+.status-line {
+  margin: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.9em;
+  color: var(--text-dim);
+}
+
+.result {
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  font-size: 0.9em;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.result.is-ok {
+  color: var(--ok);
+  background: transparent;
+  border: 1px solid var(--ok);
+}
+
+.result.is-bad {
+  color: var(--error);
+  background: var(--error-soft);
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: fit-content;
+}
+
+.segmented__btn {
+  padding: 5px 11px;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  cursor: pointer;
+}
+
+.segmented__btn:last-child {
+  border-right: 0;
+}
+
+.segmented__btn.is-active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.testmeter {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.testmeter__fill {
+  height: 100%;
+  background: var(--live);
+  transition: width 0.08s linear;
+}
+
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.sessions__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.sessions__info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9em;
+}
+
+.sessions__info .muted {
+  font-size: 0.92em;
+}
+
+.sessions__actions {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.diag {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diag li {
+  display: flex;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+}
+
+.diag li > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.diag li .muted {
+  font-size: 0.9em;
+  word-break: break-word;
+}
+
+.diag__mark {
+  font-weight: 700;
+}
+
+.diag li.is-ok .diag__mark {
+  color: var(--ok);
+}
+
+.diag li.is-bad .diag__mark {
+  color: var(--error);
+}
+
+.kv {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.92em;
+}
+
+.kv li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kv li > span:first-child {
+  color: var(--text-dim);
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
