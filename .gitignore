@@ -4,3 +4,19 @@ release/
 dist/
 *.log
 .DS_Store
+
+# 환경 변수 / 비밀값
+.env
+.env.*
+!.env.example
+
+# 자격증명 파일
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+
+# Claude Code 로컬 설정 (개인 PC 전용)
+.claude/settings.local.json
