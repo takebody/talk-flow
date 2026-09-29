@@ -2,17 +2,22 @@ import Anthropic from '@anthropic-ai/sdk'
 import type {
   ModelInfo,
   Result,
+  SummarizeRequest,
+  SummarizeResponse,
   TranscribeResponse,
   TranslateRequest,
   TranslateResponse
 } from '@shared/types'
 import {
   annotateModel,
+  buildMinutesPrompt,
   buildTranslationPrompt,
   fail,
   httpFetch,
+  minutesParseError,
   normalizeHttpError,
   normalizeThrown,
+  parseMinutesContent,
   Provider,
   ProviderContext,
   REQUEST_TIMEOUT_MS
@@ -145,6 +150,56 @@ export const anthropicProvider: Provider = {
       }
     } catch (err) {
       return annotateModel<TranslateResponse>({ ok: false, error: mapError(err) }, model)
+    }
+  },
+
+  async summarize(
+    req: SummarizeRequest,
+    ctx: ProviderContext
+  ): Promise<Result<SummarizeResponse>> {
+    const model = ctx.settings.providerConfig.anthropic.chatModel
+    const { system, user } = buildMinutesPrompt(req)
+
+    try {
+      const message = await makeClient(ctx.apiKey).messages.create({
+        model,
+        max_tokens: 8192,
+        system,
+        // 회의록은 대화 전체를 종합해야 하므로 번역과 달리 추론 여력을 남겨 둔다.
+        output_config: { effort: 'medium' },
+        messages: [{ role: 'user', content: user }]
+      })
+
+      if (message.stop_reason === 'refusal') {
+        return {
+          ok: false,
+          error: fail(
+            'BAD_REQUEST',
+            'Claude가 회의록 생성을 거부했습니다.',
+            `사유: ${message.stop_details?.category ?? '알 수 없음'}`
+          )
+        }
+      }
+
+      const text = textOf(message)
+      if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
+
+      const minutes = parseMinutesContent(text)
+      if (!minutes) return { ok: false, error: minutesParseError() }
+
+      return {
+        ok: true,
+        value: {
+          minutes,
+          model,
+          usage: {
+            inputTokens: message.usage.input_tokens,
+            outputTokens: message.usage.output_tokens
+          }
+        }
+      }
+    } catch (err) {
+      return annotateModel<SummarizeResponse>({ ok: false, error: mapError(err) }, model)
     }
   },
 

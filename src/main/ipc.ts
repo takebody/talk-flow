@@ -1,16 +1,20 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type {
   CaptureMode,
   ConversationEntry,
+  Minutes,
   ProviderId,
+  Result,
   SessionUsage,
   Settings,
   TranscribeRequest,
   TranslateRequest
 } from '@shared/types'
 import { IPC } from '@shared/defaults'
+import { minutesFileName, renderMinutesAsText } from '@shared/minutes'
 import {
   clearApiKey,
   credentialStatus,
@@ -20,8 +24,16 @@ import {
 } from './settings'
 import * as sessions from './sessions'
 import {
+  autoSaveMinutes,
+  getCurrentMinutes,
+  minutesDir,
+  openMinutesWindow,
+  setCurrentMinutes
+} from './minutes'
+import {
   TestTarget,
   listModels,
+  summarize,
   testConnection,
   transcribe,
   transcribeTranslate,
@@ -164,6 +176,94 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       }
     }
   )
+
+  /* --------------------------------------------------------------- 회의록 */
+
+  /**
+   * 대화록을 회의록으로 요약하고, 저장한 뒤 별도 창에 띄운다.
+   *
+   * 대화록은 렌더러가 만들어 보낸다. 세션 파일에서 다시 읽지 않는 이유는
+   * 기록 자동 저장이 꺼져 있으면 파일이 비어 있기 때문이다.
+   */
+  ipcMain.handle(
+    IPC.minutesGenerate,
+    async (
+      _e,
+      args: {
+        sessionId: string
+        transcript: string
+        truncated: boolean
+        meta: { startedAt: string; endedAt?: string; mode: CaptureMode; entryCount: number }
+      }
+    ): Promise<Result<Minutes>> => {
+      if (!args.transcript.trim()) {
+        return {
+          ok: false,
+          error: {
+            code: 'EMPTY',
+            message: '회의록을 만들 대화 내용이 없습니다.',
+            hint: '통역된 발화가 한 건 이상 있어야 합니다.'
+          }
+        }
+      }
+
+      const result = await summarize({
+        requestId: randomUUID(),
+        transcript: args.transcript,
+        meta: args.meta
+      })
+      if (!result.ok) return result
+
+      const minutes: Minutes = {
+        ...result.value.minutes,
+        sessionId: args.sessionId,
+        generatedAt: new Date().toISOString(),
+        startedAt: args.meta.startedAt,
+        endedAt: args.meta.endedAt,
+        mode: args.meta.mode,
+        entryCount: args.meta.entryCount,
+        provider: getSettings().translationProvider,
+        model: result.value.model,
+        truncated: args.truncated
+      }
+
+      minutes.savedPath = (await autoSaveMinutes(minutes)) ?? undefined
+      setCurrentMinutes(minutes)
+      openMinutesWindow(getWindow())
+
+      return { ok: true, value: minutes }
+    }
+  )
+
+  /** 회의록 창이 표시할 내용을 읽어 가는 채널 */
+  ipcMain.handle(IPC.minutesCurrent, () => getCurrentMinutes())
+
+  ipcMain.handle(IPC.minutesSaveAs, async () => {
+    const minutes = getCurrentMinutes()
+    if (!minutes) return { ok: false, message: '저장할 회의록이 없습니다.' }
+
+    const picked = await dialog.showSaveDialog({
+      title: '회의록 저장',
+      defaultPath: join(minutesDir(), minutesFileName(minutes)),
+      filters: [{ name: '텍스트', extensions: ['txt'] }]
+    })
+    if (picked.canceled || !picked.filePath) return { ok: false, canceled: true }
+
+    try {
+      await writeFile(picked.filePath, `﻿${renderMinutesAsText(minutes)}`, 'utf-8')
+      return { ok: true, path: picked.filePath }
+    } catch (err) {
+      return { ok: false, message: (err as Error).message }
+    }
+  })
+
+  /** 자동 저장된 파일을 탐색기에서 선택된 상태로 보여 준다. */
+  ipcMain.handle(IPC.minutesReveal, () => {
+    const path = getCurrentMinutes()?.savedPath
+    if (!path) return false
+    shell.showItemInFolder(path)
+    return true
+  })
 
   /* ------------------------------------------------------------- 창/시스템 */
 

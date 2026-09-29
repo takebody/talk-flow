@@ -3,6 +3,8 @@ import type {
   ProviderId,
   Result,
   SttProviderId,
+  SummarizeRequest,
+  SummarizeResponse,
   TranscribeRequest,
   TranscribeResponse,
   TranscribeTranslateResponse,
@@ -229,6 +231,22 @@ export async function translate(req: TranslateRequest): Promise<Result<Translate
     translationCache.set(key, result.value.text)
   }
   return result
+}
+
+/**
+ * 회의록 생성. 번역 제공자가 담당한다.
+ *
+ * 요청이 한 번뿐이고 대화 전체를 넣기 때문에 번역보다 훨씬 무겁다. 캐시는 두지
+ * 않는다 — 같은 회의를 두 번 요약하는 일은 없고, 캐시해 두면 오히려 수정 후
+ * 재생성이 막힌다.
+ */
+export async function summarize(req: SummarizeRequest): Promise<Result<SummarizeResponse>> {
+  const c = contextFor('translation')
+  if (!c.ok) return c
+  const settings = c.value.ctx.settings
+  return withRetry(settings.translationProvider, settings.limits.requestsPerMinute, () =>
+    c.value.provider.summarize(req, c.value.ctx)
+  )
 }
 
 /** 16kHz mono 무음 WAV. STT 모델명·엔드포인트를 실제 경로로 검증하는 데 쓴다. */

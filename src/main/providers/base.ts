@@ -2,9 +2,12 @@ import { net } from 'electron'
 import type {
   AiError,
   AiErrorCode,
+  MinutesContent,
   ModelInfo,
   Result,
   Settings,
+  SummarizeRequest,
+  SummarizeResponse,
   TranscribeRequest,
   TranscribeResponse,
   TranscribeTranslateResponse,
@@ -42,6 +45,8 @@ export interface Provider {
     ctx: ProviderContext
   ): Promise<Result<TranscribeTranslateResponse>>
   translate(req: TranslateRequest, ctx: ProviderContext): Promise<Result<TranslateResponse>>
+  /** 대화록을 회의록으로 요약한다. 번역 제공자가 담당한다. */
+  summarize(req: SummarizeRequest, ctx: ProviderContext): Promise<Result<SummarizeResponse>>
   /** 최소 비용으로 인증/설정을 검증한다. */
   testConnection(ctx: ProviderContext): Promise<Result<string>>
   /** 이 키로 호출할 수 있는 모델 목록. 모델명 오입력을 사용자가 직접 고칠 수 있게 한다. */
@@ -331,6 +336,123 @@ export function buildTranslationPrompt(req: TranslateRequest): { system: string;
       : ''
 
   return { system: system + glossary, user: `${context}번역할 ${from} 문장:\n${req.text}` }
+}
+
+/* ------------------------------------------------------- 공통 회의록 프롬프트 */
+
+const MODE_LABEL = { online: '온라인 회의', offline: '오프라인 회의' } as const
+
+/**
+ * 회의록 생성 프롬프트.
+ *
+ * 대화록은 STT 결과이므로 오인식과 끊긴 문장이 섞여 있다. 모델이 그 빈칸을
+ * 상상으로 채우면 "회의에서 결정되지 않은 결정 사항"이 생겨 회의록을 신뢰할 수
+ * 없게 된다. 근거 없는 항목은 비우도록 반복해서 지시한다.
+ */
+export function buildMinutesPrompt(req: SummarizeRequest): { system: string; user: string } {
+  const system = [
+    '당신은 비즈니스 회의의 회의록을 작성하는 서기입니다.',
+    '실시간 통역 앱이 기록한 회의 대화록을 읽고 한국어 회의록을 작성합니다.',
+    '',
+    '규칙:',
+    '1. 대화록에 실제로 나온 내용만 쓰세요. 추측하거나 일반론으로 채우지 마세요.',
+    '2. 근거가 없는 항목은 빈 배열로 두세요. 빈 항목은 잘못된 항목보다 낫습니다.',
+    '3. 담당자(owner)는 대화에서 이름이나 역할이 확인될 때만 적고, 아니면 생략하세요.',
+    '4. 대화록은 음성 인식 결과라 오인식과 잘린 문장이 섞여 있습니다.',
+    '   문맥으로 명백히 교정할 수 있는 것만 다듬고, 불확실하면 followUps에 확인 필요로 남기세요.',
+    '5. 결정 사항(decisions)은 합의되거나 확정된 것만 넣으세요. 논의만 된 것은 keyPoints로 보내세요.',
+    '6. 고유명사, 제품명, 약어, 숫자, 단위는 원형을 유지하세요.',
+    '7. 모든 출력은 한국어 격식체(-습니다/-니다)로 쓰세요.',
+    '',
+    '아래 JSON 형식만 출력하세요. 설명, 주석, 코드 펜스를 붙이지 마세요.',
+    '{',
+    '  "title": "회의 주제를 20자 이내로",',
+    '  "summary": "회의 전체를 3~5문장으로 요약",',
+    '  "keyPoints": ["논의된 주요 내용"],',
+    '  "decisions": ["확정된 결정 사항"],',
+    '  "actionItems": [{ "task": "해야 할 일", "owner": "담당자", "due": "기한" }],',
+    '  "followUps": ["확인이 필요하거나 미결로 남은 사항"]',
+    '}'
+  ].join('\n')
+
+  const started = new Date(req.meta.startedAt)
+  const ended = req.meta.endedAt ? new Date(req.meta.endedAt) : null
+  const header = [
+    `회의 일시: ${started.toLocaleString('ko-KR')}`,
+    ended ? `종료 시각: ${ended.toLocaleString('ko-KR')}` : null,
+    `회의 형태: ${MODE_LABEL[req.meta.mode]}`,
+    `발화 수: ${req.meta.entryCount}건`
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  return {
+    system,
+    user: `${header}\n\n--- 회의 대화록 ---\n${req.transcript}\n--- 대화록 끝 ---\n\n위 대화록으로 회의록 JSON을 작성하세요.`
+  }
+}
+
+/** 배열이 아니거나 빈 문자열이 섞여 와도 화면이 깨지지 않도록 정리한다. */
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter((v) => v.length > 0)
+    .slice(0, 30)
+}
+
+/**
+ * 모델 응답에서 회의록 JSON을 뽑아낸다.
+ *
+ * JSON만 달라고 지시해도 코드 펜스나 앞뒤 설명을 붙이는 모델이 있으므로
+ * 첫 `{` 부터 마지막 `}` 까지를 잘라 파싱한다.
+ */
+export function parseMinutesContent(raw: string): MinutesContent | null {
+  const start = raw.indexOf('{')
+  const end = raw.lastIndexOf('}')
+  if (start < 0 || end <= start) return null
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+
+  const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
+  const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
+  if (!summary) return null
+
+  const actionItems = Array.isArray(parsed.actionItems)
+    ? parsed.actionItems
+        .map((item) => {
+          const row = (item ?? {}) as Record<string, unknown>
+          const task = typeof row.task === 'string' ? row.task.trim() : ''
+          const owner = typeof row.owner === 'string' ? row.owner.trim() : ''
+          const due = typeof row.due === 'string' ? row.due.trim() : ''
+          return task ? { task, owner: owner || undefined, due: due || undefined } : null
+        })
+        .filter((v): v is NonNullable<typeof v> => v !== null)
+        .slice(0, 30)
+    : []
+
+  return {
+    title: title || '제목 없는 회의',
+    summary,
+    keyPoints: stringList(parsed.keyPoints),
+    decisions: stringList(parsed.decisions),
+    actionItems,
+    followUps: stringList(parsed.followUps)
+  }
+}
+
+/** 모델이 JSON을 주지 않았을 때의 공통 오류. */
+export function minutesParseError(): AiError {
+  return fail(
+    'BAD_REQUEST',
+    '회의록 응답을 해석할 수 없습니다.',
+    '모델이 JSON 형식으로 답하지 않았습니다. 다시 시도하거나 설정에서 다른 모델을 선택하세요.'
+  )
 }
 
 export const STT_PROMPT_EN =

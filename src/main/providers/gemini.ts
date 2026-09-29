@@ -1,6 +1,8 @@
 import type {
   ModelInfo,
   Result,
+  SummarizeRequest,
+  SummarizeResponse,
   TranscribeRequest,
   TranscribeResponse,
   TranscribeTranslateResponse,
@@ -10,9 +12,12 @@ import type {
 import { detectLanguage } from '@shared/lang'
 import {
   annotateModel,
+  buildMinutesPrompt,
   buildTranslationPrompt,
   fail,
   httpJson,
+  minutesParseError,
+  parseMinutesContent,
   Provider,
   ProviderContext,
   STT_PROMPT_AUTO,
@@ -219,6 +224,82 @@ export const geminiProvider: Provider = {
       ok: true,
       value: {
         text,
+        usage: {
+          inputTokens: body.usageMetadata?.promptTokenCount,
+          outputTokens: body.usageMetadata?.candidatesTokenCount
+        }
+      }
+    }
+  },
+
+  async summarize(
+    req: SummarizeRequest,
+    ctx: ProviderContext
+  ): Promise<Result<SummarizeResponse>> {
+    const model = ctx.settings.providerConfig.gemini.chatModel
+    const { system, user } = buildMinutesPrompt(req)
+
+    const res = await httpJson(url(model, ctx.apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': ctx.apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 4096,
+          // 스키마를 주면 코드 펜스 없이 순수 JSON으로 답한다.
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              title: { type: 'STRING' },
+              summary: { type: 'STRING' },
+              keyPoints: { type: 'ARRAY', items: { type: 'STRING' } },
+              decisions: { type: 'ARRAY', items: { type: 'STRING' } },
+              actionItems: {
+                type: 'ARRAY',
+                items: {
+                  type: 'OBJECT',
+                  properties: {
+                    task: { type: 'STRING' },
+                    owner: { type: 'STRING' },
+                    due: { type: 'STRING' }
+                  },
+                  required: ['task']
+                }
+              },
+              followUps: { type: 'ARRAY', items: { type: 'STRING' } }
+            },
+            required: ['title', 'summary', 'keyPoints', 'decisions', 'actionItems', 'followUps']
+          }
+        }
+      })
+    })
+    if (!res.ok) return annotateModel(res, model)
+
+    const body = res.value.json as GenerateContentResponse
+    if (body.promptFeedback?.blockReason) {
+      return {
+        ok: false,
+        error: fail(
+          'BAD_REQUEST',
+          `Gemini가 회의록 생성을 차단했습니다. (${body.promptFeedback.blockReason})`
+        )
+      }
+    }
+
+    const text = extractText(body)
+    if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
+
+    const minutes = parseMinutesContent(text)
+    if (!minutes) return { ok: false, error: minutesParseError() }
+
+    return {
+      ok: true,
+      value: {
+        minutes,
+        model,
         usage: {
           inputTokens: body.usageMetadata?.promptTokenCount,
           outputTokens: body.usageMetadata?.candidatesTokenCount

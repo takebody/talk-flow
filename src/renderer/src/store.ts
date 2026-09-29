@@ -21,6 +21,7 @@ import {
   defaultSettings
 } from '@shared/defaults'
 import { detectLanguage, isNoiseTranscript } from '@shared/lang'
+import { buildTranscript, usableEntries } from '@shared/minutes'
 import { CaptureEngine, type Utterance } from './audio/CaptureEngine'
 
 export type AppStatus = 'idle' | 'capturing' | 'paused' | 'error'
@@ -50,6 +51,8 @@ interface State {
   busyCount: number
   sessionList: SessionMeta[]
   settingsOpen: boolean
+  /** 회의록 생성이 진행 중인지. 요청 한 번이 수십 초 걸릴 수 있다. */
+  minutesBusy: boolean
 
   init(): Promise<void>
   patchSettings(patch: Partial<Settings>): Promise<void>
@@ -63,6 +66,8 @@ interface State {
   pause(): Promise<void>
   resume(): Promise<void>
   stop(): Promise<void>
+  /** 통역을 끝내고 회의록을 작성한다. */
+  stopAndSummarize(): Promise<void>
   submitText(text: string): Promise<void>
   retryEntry(id: string): Promise<void>
   reclassify(id: string, direction: Direction): Promise<void>
@@ -145,6 +150,28 @@ export const useStore = create<State>((set, get) => {
     const session = await window.talkflow.session.start(mode)
     set({ session, usage: emptyUsage() })
     return session
+  }
+
+  /**
+   * 캡처를 멈추고 세션을 닫는다.
+   * 회의록 생성에 필요한 정보(세션, 항목, 종료 시각)를 그대로 돌려준다 —
+   * 상태를 초기화한 뒤에는 store에서 다시 읽을 수 없기 때문이다.
+   */
+  const finishSession = async () => {
+    engine.flush()
+    await engine.stop()
+    const { session, usage, entries, mode } = get()
+    const endedAt = nowIso()
+    if (session) {
+      const sessionList = await window.talkflow.session.end(
+        session.sessionId,
+        usage,
+        entries.length
+      )
+      set({ sessionList })
+    }
+    set({ status: 'idle', session: null, level: 0, speaking: false })
+    return { session, entries, endedAt, mode }
   }
 
   const translationContext = (): { role: 'peer' | 'user'; text: string }[] =>
@@ -346,6 +373,7 @@ export const useStore = create<State>((set, get) => {
     busyCount: 0,
     sessionList: [],
     settingsOpen: false,
+    minutesBusy: false,
 
     async init() {
       const settings = await window.talkflow.settings.get()
@@ -483,18 +511,83 @@ export const useStore = create<State>((set, get) => {
     },
 
     async stop() {
-      engine.flush()
-      await engine.stop()
-      const { session, usage, entries } = get()
-      if (session) {
-        const sessionList = await window.talkflow.session.end(
-          session.sessionId,
-          usage,
-          entries.length
-        )
-        set({ sessionList })
+      await finishSession()
+    },
+
+    /**
+     * 통역 종료 → 회의록 작성.
+     *
+     * 캡처를 먼저 완전히 멈춘 뒤 요약을 시작한다. 캡처가 돌아가는 동안 요약하면
+     * 요약 중에 들어온 발화가 회의록에 빠진다.
+     */
+    async stopAndSummarize() {
+      const { session, entries, endedAt, mode } = await finishSession()
+
+      const usable = usableEntries(entries)
+      if (usable.length === 0) {
+        set({
+          banner: {
+            kind: 'info',
+            message: '통역된 대화가 없어 회의록을 만들지 않았습니다.'
+          }
+        })
+        return
       }
-      set({ status: 'idle', session: null, level: 0, speaking: false })
+
+      const { credential, settings } = get()
+      if (!credential?.hasKey) {
+        set({
+          banner: {
+            kind: 'warn',
+            message: `${PROVIDER_LABELS[settings.translationProvider]} API Key가 없어 회의록을 만들 수 없습니다.`,
+            hint: '설정에서 API Key를 입력하세요.'
+          },
+          settingsOpen: true
+        })
+        return
+      }
+
+      const { text, truncated } = buildTranscript(entries)
+
+      set({
+        minutesBusy: true,
+        banner: { kind: 'info', message: '회의록을 작성하고 있습니다… 잠시 기다려 주세요.' }
+      })
+
+      try {
+        const result = await window.talkflow.minutes.generate({
+          sessionId: session?.sessionId ?? '',
+          transcript: text,
+          truncated,
+          meta: {
+            startedAt: session?.startedAt ?? usable[0].timestamp,
+            endedAt,
+            mode,
+            entryCount: usable.length
+          }
+        })
+
+        if (!result.ok) {
+          set({ banner: bannerFromError(result.error) })
+          return
+        }
+
+        set({
+          banner: result.value.savedPath
+            ? {
+                kind: 'info',
+                message: '회의록을 작성해 별도 창에 열었습니다.',
+                hint: `저장 위치: ${result.value.savedPath}`
+              }
+            : {
+                kind: 'warn',
+                message: '회의록을 작성했지만 자동 저장에 실패했습니다.',
+                hint: '회의록 창에서 "다른 이름으로 저장"을 눌러 직접 저장하세요.'
+              }
+        })
+      } finally {
+        set({ minutesBusy: false })
+      }
     },
 
     async submitText(raw) {

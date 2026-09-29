@@ -6,6 +6,7 @@ import type {
   CaptureMode,
   ConversationEntry,
   CredentialStatus,
+  Minutes,
   ProviderId,
   Result,
   SessionMeta,
@@ -72,6 +73,25 @@ const api = {
       format: 'json' | 'txt'
     ): Promise<{ ok: boolean; path?: string; message?: string; canceled?: boolean }> =>
       ipcRenderer.invoke(IPC.sessionExport, { sessionId, format })
+  },
+
+  minutes: {
+    /** 대화록을 회의록으로 요약하고, 저장한 뒤 별도 창에 띄운다. */
+    generate: (args: {
+      sessionId: string
+      transcript: string
+      truncated: boolean
+      meta: { startedAt: string; endedAt?: string; mode: CaptureMode; entryCount: number }
+    }): Promise<Result<Minutes>> => ipcRenderer.invoke(IPC.minutesGenerate, args),
+    /** 회의록 창이 표시할 내용 */
+    current: (): Promise<Minutes | null> => ipcRenderer.invoke(IPC.minutesCurrent),
+    saveAs: (): Promise<{
+      ok: boolean
+      path?: string
+      message?: string
+      canceled?: boolean
+    }> => ipcRenderer.invoke(IPC.minutesSaveAs),
+    reveal: (): Promise<boolean> => ipcRenderer.invoke(IPC.minutesReveal)
   },
 
   window: {

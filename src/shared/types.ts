@@ -117,6 +117,56 @@ export interface SessionRecord extends SessionMeta {
   entries: ConversationEntry[]
 }
 
+/* -------------------------------------------------------------------- 회의록 */
+
+export interface ActionItem {
+  task: string
+  /** 담당자. 대화에서 확인되지 않으면 비운다(추측하지 않는다). */
+  owner?: string
+  due?: string
+}
+
+/** AI가 대화록에서 생성한 회의록 본문 */
+export interface MinutesContent {
+  title: string
+  summary: string
+  keyPoints: string[]
+  decisions: string[]
+  actionItems: ActionItem[]
+  followUps: string[]
+}
+
+/** 회의록 본문 + 생성 메타. 별도 창과 텍스트 파일이 모두 이 구조를 쓴다. */
+export interface Minutes extends MinutesContent {
+  sessionId: string
+  generatedAt: string
+  startedAt: string
+  endedAt?: string
+  mode: CaptureMode
+  entryCount: number
+  /** 회의록을 생성한 제공자와 모델 */
+  provider: ProviderId
+  model: string
+  /** 자동 저장된 텍스트 파일 경로 */
+  savedPath?: string
+  /** 대화가 길어 프롬프트에서 일부를 생략했는지 */
+  truncated?: boolean
+}
+
+export interface SummarizeRequest {
+  requestId: string
+  /** 회의록 생성 대상 대화 평문 */
+  transcript: string
+  meta: { startedAt: string; endedAt?: string; mode: CaptureMode; entryCount: number }
+}
+
+export interface SummarizeResponse {
+  minutes: MinutesContent
+  /** 실제로 사용된 모델 ID */
+  model: string
+  usage?: Usage
+}
+
 /* ------------------------------------------------------------------ 설정 모델 */
 
 export interface PricingRates {

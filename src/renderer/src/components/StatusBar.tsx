@@ -7,8 +7,11 @@ function statusView(
   status: string,
   busy: number,
   hasKey: boolean,
-  speaking: boolean
+  speaking: boolean,
+  minutesBusy: boolean
 ): StatusView {
+  // 회의록 작성은 통역이 끝난 뒤에도 수십 초 이어진다. 가장 먼저 알려야 한다.
+  if (minutesBusy) return { label: '회의록 작성 중', tone: 'busy' }
   if (status === 'error') return { label: '오류', tone: 'error' }
   if (!hasKey) return { label: '키 미설정', tone: 'warn' }
   if (status === 'paused') return { label: '일시정지', tone: 'warn' }
@@ -30,13 +33,14 @@ export function StatusBar(): React.JSX.Element {
   const start = useStore((s) => s.start)
   const pause = useStore((s) => s.pause)
   const resume = useStore((s) => s.resume)
-  const stop = useStore((s) => s.stop)
+  const stopAndSummarize = useStore((s) => s.stopAndSummarize)
+  const minutesBusy = useStore((s) => s.minutesBusy)
   const settings = useStore((s) => s.settings)
   const credential = useStore((s) => s.credential)
   const openSettings = useStore((s) => s.openSettings)
   const patchSettings = useStore((s) => s.patchSettings)
 
-  const view = statusView(status, busy, !!credential?.hasKey, speaking)
+  const view = statusView(status, busy, !!credential?.hasKey, speaking, minutesBusy)
   const running = status === 'capturing'
 
   const toggleAlwaysOnTop = async () => {
@@ -65,7 +69,7 @@ export function StatusBar(): React.JSX.Element {
 
         <div className="statusbar__spacer" />
 
-        {!running && status !== 'paused' && (
+        {!running && status !== 'paused' && !minutesBusy && (
           <button type="button" className="btn btn--primary" onClick={() => void start()}>
             통역 시작
           </button>
@@ -80,9 +84,26 @@ export function StatusBar(): React.JSX.Element {
             재개
           </button>
         )}
-        {(running || status === 'paused') && (
-          <button type="button" className="btn btn--ghost" onClick={() => void stop()}>
-            종료
+        {/*
+          회의록 작성이 끝날 때까지 버튼을 남겨 둔다. 상태가 idle로 바뀌면서
+          버튼이 사라지면 사용자는 무엇이 진행 중인지 알 수 없다.
+        */}
+        {(running || status === 'paused' || minutesBusy) && (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={minutesBusy}
+            onClick={() => void stopAndSummarize()}
+            title="통역을 끝내고 회의록을 작성합니다."
+          >
+            {minutesBusy ? (
+              <>
+                <span className="spinner spinner--inline" aria-hidden="true" />
+                회의록 작성 중…
+              </>
+            ) : (
+              '통역 종료'
+            )}
           </button>
         )}
 

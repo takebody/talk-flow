@@ -1,6 +1,8 @@
 import type {
   ModelInfo,
   Result,
+  SummarizeRequest,
+  SummarizeResponse,
   TranscribeRequest,
   TranscribeResponse,
   TranslateRequest,
@@ -9,12 +11,15 @@ import type {
 import { detectLanguage } from '@shared/lang'
 import {
   annotateModel,
+  buildMinutesPrompt,
   buildTranslationPrompt,
   fail,
   httpFetch,
   httpJson,
+  minutesParseError,
   normalizeHttpError,
   normalizeThrown,
+  parseMinutesContent,
   Provider,
   ProviderContext,
   REQUEST_TIMEOUT_MS,
@@ -133,6 +138,51 @@ export function makeOpenAiCompatible(config: {
         ok: true,
         value: {
           text,
+          usage: {
+            inputTokens: body.usage?.prompt_tokens,
+            outputTokens: body.usage?.completion_tokens
+          }
+        }
+      }
+    },
+
+    async summarize(
+      req: SummarizeRequest,
+      ctx: ProviderContext
+    ): Promise<Result<SummarizeResponse>> {
+      const problem = guard(ctx)
+      if (problem) return { ok: false, error: fail('NOT_CONFIGURED', problem) }
+
+      const model = config.chatModel(ctx)
+      const { system, user } = buildMinutesPrompt(req)
+      const res = await httpJson(config.chatUrl(ctx), {
+        method: 'POST',
+        headers: { ...config.headers(ctx), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          temperature: 0.3,
+          // 회의록은 번역문 한 문장보다 훨씬 길다.
+          max_tokens: 4000,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ]
+        })
+      })
+      if (!res.ok) return annotateModel(res, model)
+
+      const body = res.value.json as ChatCompletion
+      const text = body.choices?.[0]?.message?.content?.trim()
+      if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
+
+      const minutes = parseMinutesContent(text)
+      if (!minutes) return { ok: false, error: minutesParseError() }
+
+      return {
+        ok: true,
+        value: {
+          minutes,
+          model,
           usage: {
             inputTokens: body.usage?.prompt_tokens,
             outputTokens: body.usage?.completion_tokens
