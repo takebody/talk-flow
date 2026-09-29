@@ -6,11 +6,14 @@ import type {
   CredentialStatus,
   Direction,
   Lang,
+  LanguagePair,
+  Participant,
   ProviderId,
   SessionMeta,
   SessionUsage,
   Settings,
-  SttProviderId
+  SttProviderId,
+  VoiceProfile
 } from '@shared/types'
 import { emptyUsage } from '@shared/types'
 import {
@@ -43,6 +46,10 @@ interface State {
   status: AppStatus
   session: SessionMeta | null
   entries: ConversationEntry[]
+  /** 감지된 회의 참석자(화자) 목록 */
+  participants: Participant[]
+  /** 특정 참석자 발화만 보기 위한 필터 (null = 전체 보기) */
+  selectedSpeakerId: string | null
   usage: SessionUsage
   latencies: number[]
   level: number
@@ -62,6 +69,7 @@ interface State {
   switchSttProvider(provider: SttProviderId): Promise<void>
   acceptConsent(): Promise<void>
   setMode(mode: CaptureMode): void
+  setLanguagePair(pair: LanguagePair): Promise<void>
   start(): Promise<void>
   pause(): Promise<void>
   resume(): Promise<void>
@@ -75,6 +83,8 @@ interface State {
   openSettings(open: boolean): void
   refreshSessions(): Promise<void>
   setBanner(banner: Banner | null): void
+  setSelectedSpeakerId(id: string | null): void
+  renameParticipant(id: string, newName: string): void
 }
 
 const engine = new CaptureEngine()
@@ -105,15 +115,33 @@ function bannerFromError(error: AiError): Banner {
 }
 
 /** STT 결과를 방향과 번역 언어쌍으로 라우팅한다 (오프라인 양방향 통역의 핵심). */
-function route(text: string, detected: { language: string; confidence: number }) {
+function route(
+  text: string,
+  detected: { language: string; confidence: number },
+  pair: LanguagePair = 'en-ko'
+) {
+  const partnerLang: Lang = pair === 'ja-ko' ? 'ja' : 'en'
   let from: Lang
-  if (detected.language === 'ko') from = 'ko'
-  else if (detected.language === 'en') from = 'en'
-  else from = /[가-힣]/.test(text) ? 'ko' : 'en'
+  if (detected.language === 'ko') {
+    from = 'ko'
+  } else if (detected.language === partnerLang) {
+    from = partnerLang
+  } else {
+    if (/[가-힣]/.test(text)) {
+      from = 'ko'
+    } else if (pair === 'ja-ko' && /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(text)) {
+      from = 'ja'
+    } else if (pair === 'en-ko' && /[A-Za-z]/.test(text)) {
+      from = 'en'
+    } else {
+      from = partnerLang
+    }
+  }
 
   const needsReview = detected.language === 'unknown' || detected.confidence < 0.7
-  const direction: Direction = from === 'en' ? 'incoming' : 'outgoing'
-  return { from, to: (from === 'en' ? 'ko' : 'en') as Lang, direction, needsReview }
+  const direction: Direction = from === partnerLang ? 'incoming' : 'outgoing'
+  const to: Lang = from === partnerLang ? 'ko' : partnerLang
+  return { from, to, direction, needsReview }
 }
 
 export const useStore = create<State>((set, get) => {
@@ -227,9 +255,124 @@ export const useStore = create<State>((set, get) => {
     }
   }
 
+  const resolveParticipant = (
+    direction: Direction,
+    voiceProfile?: VoiceProfile,
+    acousticProfile?: VoiceProfile
+  ): { participant: Participant; resolvedProfile: VoiceProfile } => {
+    const gender =
+      voiceProfile?.gender && voiceProfile.gender !== 'unknown'
+        ? voiceProfile.gender
+        : acousticProfile?.gender || 'unknown'
+    const tone = voiceProfile?.tone || acousticProfile?.tone
+    const accent = voiceProfile?.accent || acousticProfile?.accent
+    const pronunciation = voiceProfile?.pronunciation || acousticProfile?.pronunciation
+
+    let summary = voiceProfile?.summary || acousticProfile?.summary
+    if (!summary) {
+      const parts = [
+        gender === 'female' ? '여성' : gender === 'male' ? '남성' : null,
+        tone,
+        accent
+      ].filter(Boolean)
+      summary = parts.join(' · ') || '참석자 음성'
+    }
+
+    const resolvedProfile: VoiceProfile = {
+      gender,
+      tone,
+      accent,
+      pronunciation,
+      summary,
+      pitchHz: acousticProfile?.pitchHz ?? voiceProfile?.pitchHz
+    }
+
+    const { participants } = get()
+
+    if (direction === 'outgoing') {
+      const existing = participants.find((p) => p.id === 'me')
+      if (existing) {
+        existing.utteranceCount++
+        existing.lastSpokeAt = nowIso()
+        set({ participants: [...participants] })
+        return { participant: existing, resolvedProfile }
+      }
+      const meParticipant: Participant = {
+        id: 'me',
+        name: '나',
+        colorIndex: -1,
+        gender,
+        tone,
+        summary: '나 (본인)',
+        utteranceCount: 1,
+        lastSpokeAt: nowIso()
+      }
+      set({ participants: [meParticipant, ...participants] })
+      return { participant: meParticipant, resolvedProfile }
+    }
+
+    // 상대방(Incoming) 화자 클러스터링
+    const incomingParticipants = participants.filter((p) => p.id !== 'me')
+    let bestMatch: Participant | null = null
+    let bestScore = 0
+
+    for (const p of incomingParticipants) {
+      let score = 0
+      if (gender !== 'unknown' && p.gender && p.gender !== 'unknown') {
+        if (gender === p.gender) score += 3
+        else score -= 3
+      }
+      if (resolvedProfile.pitchHz && p.tone) {
+        if (
+          (resolvedProfile.pitchHz < 165 && p.tone.includes('저음')) ||
+          (resolvedProfile.pitchHz >= 165 && p.tone.includes('고음'))
+        ) {
+          score += 2
+        }
+      }
+      if (tone && p.tone && (tone.includes(p.tone) || p.tone.includes(tone))) {
+        score += 2
+      }
+      if (accent && p.accent && (accent.includes(p.accent) || p.accent.includes(accent))) {
+        score += 2
+      }
+
+      if (score > bestScore) {
+        bestScore = score
+        bestMatch = p
+      }
+    }
+
+    if (bestMatch && bestScore >= 3) {
+      bestMatch.utteranceCount++
+      bestMatch.lastSpokeAt = nowIso()
+      set({ participants: [...participants] })
+      return { participant: bestMatch, resolvedProfile }
+    }
+
+    // 신규 참석자 등록
+    const nextNum = incomingParticipants.length + 1
+    const newParticipant: Participant = {
+      id: `attendee-${nextNum}`,
+      name: `참석자 ${nextNum}`,
+      colorIndex: incomingParticipants.length % 8,
+      gender,
+      tone,
+      accent,
+      pronunciation,
+      summary,
+      utteranceCount: 1,
+      lastSpokeAt: nowIso()
+    }
+    set({ participants: [...participants, newParticipant] })
+    return { participant: newParticipant, resolvedProfile }
+  }
+
   /** 발화 하나에 대한 전체 파이프라인: STT → 언어 판정 → 번역 */
   const handleUtterance = async (utterance: Utterance) => {
     const mode = get().mode
+    const pair = get().settings.languagePair ?? 'en-ko'
+    const partnerLang: Lang = pair === 'ja-ko' ? 'ja' : 'en'
     const id = newId()
 
     set((s) => ({
@@ -253,6 +396,7 @@ export const useStore = create<State>((set, get) => {
     set((s) => ({ busyCount: s.busyCount + 1 }))
     let transcript: string | null = null
     let detected = { language: 'unknown' as string, confidence: 0 }
+    let voiceProfile: VoiceProfile | undefined
 
     // 통합 호출: 전사와 번역을 한 요청으로 받는다(가능한 경우).
     let combinedTranslation: string | undefined
@@ -262,8 +406,9 @@ export const useStore = create<State>((set, get) => {
         requestId: newId(),
         wav: utterance.wav,
         durationMs: utterance.durationMs,
-        // 온라인 모드는 상대방 영어 발화가 대부분이므로 힌트를 준다.
-        languageHint: mode === 'online' ? 'en' : 'auto'
+        // 온라인 모드는 상대방 발화가 대부분이므로 힌트를 준다.
+        languageHint: mode === 'online' ? partnerLang : 'auto',
+        languagePair: pair
       })
 
       if (!result.ok) {
@@ -301,6 +446,7 @@ export const useStore = create<State>((set, get) => {
         confidence: result.value.languageConfidence
       }
       combinedTranslation = result.value.translatedText
+      voiceProfile = result.value.voiceProfile
     } finally {
       set((s) => ({ busyCount: Math.max(0, s.busyCount - 1) }))
       release()
@@ -308,14 +454,24 @@ export const useStore = create<State>((set, get) => {
 
     if (!transcript) return
 
-    const routed = route(transcript, detected)
+    const routed = route(transcript, detected, pair)
+    const { participant, resolvedProfile } = resolveParticipant(
+      routed.direction,
+      voiceProfile,
+      utterance.acousticProfile
+    )
+
     updateEntry(id, {
       sourceText: transcript,
       sourceLanguage: routed.from,
       targetLanguage: routed.to,
       direction: routed.direction,
       needsReview: routed.needsReview,
-      languageConfidence: detected.confidence
+      languageConfidence: detected.confidence,
+      speakerId: participant.id,
+      speakerName: participant.name,
+      voiceProfile: resolvedProfile,
+      colorIndex: participant.colorIndex
     })
 
     if (combinedTranslation) {
@@ -365,6 +521,8 @@ export const useStore = create<State>((set, get) => {
     status: 'idle',
     session: null,
     entries: [],
+    participants: [],
+    selectedSpeakerId: null,
     usage: emptyUsage(),
     latencies: [],
     level: 0,
@@ -475,6 +633,9 @@ export const useStore = create<State>((set, get) => {
 
       try {
         await ensureSession(mode)
+        if (get().entries.length === 0) {
+          set({ participants: [], selectedSpeakerId: null })
+        }
         await engine.start(mode, settings, captureCallbacks)
         set({ status: 'capturing', banner: null })
       } catch (err) {
@@ -622,11 +783,15 @@ export const useStore = create<State>((set, get) => {
 
       await ensureSession(mode)
 
-      const detected = detectLanguage(text)
-      // 입력창은 한국어 전용이지만, 영어를 붙여넣는 경우도 자연스럽게 처리한다.
-      const from: Lang = detected.language === 'en' ? 'en' : 'ko'
+      const pair = settings.languagePair ?? 'en-ko'
+      const partnerLang: Lang = pair === 'ja-ko' ? 'ja' : 'en'
+      const detected = detectLanguage(text, pair)
+      // 입력창은 기본 한국어 입력이지만, 상대방 언어(영어/일본어)를 입력한 경우도 자연스럽게 처리
+      const from: Lang = detected.language === partnerLang ? partnerLang : 'ko'
+      const to: Lang = from === 'ko' ? partnerLang : 'ko'
       const id = newId()
       const startedAt = Date.now()
+      const { participant, resolvedProfile } = resolveParticipant('outgoing')
 
       set((s) => ({
         entries: [
@@ -637,31 +802,57 @@ export const useStore = create<State>((set, get) => {
             direction: 'outgoing',
             source: 'text',
             sourceLanguage: from,
-            targetLanguage: from === 'ko' ? 'en' : 'ko',
+            targetLanguage: to,
             sourceText: text,
-            status: 'translating'
+            status: 'translating',
+            speakerId: participant.id,
+            speakerName: participant.name,
+            voiceProfile: resolvedProfile,
+            colorIndex: participant.colorIndex
           }
         ],
         banner: null
       }))
 
-      await runTranslation(id, text, from, from === 'ko' ? 'en' : 'ko', startedAt)
+      await runTranslation(id, text, from, to, startedAt)
     },
 
     async retryEntry(id) {
       const entry = get().entries.find((e) => e.id === id)
       if (!entry || !entry.sourceText) return
-      const from = entry.sourceLanguage === 'ko' ? 'ko' : 'en'
-      await runTranslation(id, entry.sourceText, from, from === 'ko' ? 'en' : 'ko', Date.now())
+      const pair = get().settings.languagePair ?? 'en-ko'
+      const partnerLang: Lang = pair === 'ja-ko' ? 'ja' : 'en'
+      const from: Lang = entry.sourceLanguage === 'ko' ? 'ko' : partnerLang
+      const to: Lang = from === 'ko' ? partnerLang : 'ko'
+      await runTranslation(id, entry.sourceText, from, to, Date.now())
     },
 
     async reclassify(id, direction) {
       const entry = get().entries.find((e) => e.id === id)
       if (!entry || !entry.sourceText) return
+      const pair = get().settings.languagePair ?? 'en-ko'
+      const partnerLang: Lang = pair === 'ja-ko' ? 'ja' : 'en'
       // 방향을 바꾸면 번역 언어쌍도 반대가 된다.
-      const from: Lang = direction === 'incoming' ? 'en' : 'ko'
-      updateEntry(id, { direction, needsReview: false, translatedText: undefined })
-      await runTranslation(id, entry.sourceText, from, from === 'en' ? 'ko' : 'en', Date.now())
+      const from: Lang = direction === 'incoming' ? partnerLang : 'ko'
+      const to: Lang = from === partnerLang ? 'ko' : partnerLang
+      const { participant, resolvedProfile } = resolveParticipant(direction, entry.voiceProfile)
+      updateEntry(id, {
+        direction,
+        needsReview: false,
+        translatedText: undefined,
+        speakerId: participant.id,
+        speakerName: participant.name,
+        voiceProfile: resolvedProfile,
+        colorIndex: participant.colorIndex
+      })
+      await runTranslation(id, entry.sourceText, from, to, Date.now())
+    },
+
+    async setLanguagePair(pair) {
+      if (pair === get().settings.languagePair) return
+      await get().patchSettings({ languagePair: pair })
+      const label = pair === 'ja-ko' ? '일본어 ⇄ 한국어' : '영어 ⇄ 한국어'
+      set({ banner: { kind: 'info', message: `회의 언어를 ${label}로 변경했습니다.` } })
     },
 
     dismissBanner() {
@@ -678,6 +869,19 @@ export const useStore = create<State>((set, get) => {
 
     async refreshSessions() {
       set({ sessionList: await window.talkflow.session.list() })
+    },
+
+    setSelectedSpeakerId(id) {
+      set({ selectedSpeakerId: id })
+    },
+
+    renameParticipant(id, newName) {
+      const trimmed = newName.trim()
+      if (!trimmed) return
+      set((s) => ({
+        participants: s.participants.map((p) => (p.id === id ? { ...p, name: trimmed } : p)),
+        entries: s.entries.map((e) => (e.speakerId === id ? { ...e, speakerName: trimmed } : e))
+      }))
     }
   }
 })

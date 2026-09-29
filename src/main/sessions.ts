@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   CaptureMode,
   ConversationEntry,
+  LanguagePair,
   ProviderId,
   SessionMeta,
   SessionRecord,
@@ -69,13 +70,15 @@ function upsertIndex(meta: SessionMeta): void {
 export function startSession(
   mode: CaptureMode,
   sttProvider: SttProviderId,
-  translationProvider: ProviderId
+  translationProvider: ProviderId,
+  languagePair?: LanguagePair
 ): SessionMeta {
   ensureDir()
   const meta: SessionMeta = {
     sessionId: randomUUID(),
     startedAt: new Date().toISOString(),
     mode,
+    languagePair,
     sttProvider,
     translationProvider,
     entryCount: 0,
@@ -170,6 +173,7 @@ export function renderSessionAsText(record: SessionRecord): string {
   lines.push(`시작       : ${new Date(record.startedAt).toLocaleString('ko-KR')}`)
   if (record.endedAt) lines.push(`종료       : ${new Date(record.endedAt).toLocaleString('ko-KR')}`)
   lines.push(`모드       : ${record.mode === 'online' ? '온라인 회의' : '오프라인 회의'}`)
+  lines.push(`회의 언어  : ${record.languagePair === 'ja-ko' ? '일본어 ⇄ 한국어' : '영어 ⇄ 한국어'}`)
   lines.push(`음성 인식  : ${record.sttProvider}`)
   lines.push(`번역       : ${record.translationProvider}`)
   lines.push(`항목 수    : ${record.entries.length}`)
@@ -177,8 +181,9 @@ export function renderSessionAsText(record: SessionRecord): string {
   lines.push('')
 
   for (const e of record.entries) {
-    const who = e.direction === 'incoming' ? '상대방' : '나'
-    lines.push(`[${timeOf(e.timestamp)}] ${who}`)
+    const who = e.speakerName || (e.direction === 'incoming' ? '상대방' : '나')
+    const voiceTag = e.voiceProfile?.summary ? ` [${e.voiceProfile.summary}]` : ''
+    lines.push(`[${timeOf(e.timestamp)}] ${who}${voiceTag}`)
     lines.push(`  원문(${e.sourceLanguage}) : ${e.sourceText}`)
     if (e.translatedText) lines.push(`  번역(${e.targetLanguage}) : ${e.translatedText}`)
     if (e.status === 'error') lines.push(`  오류 : ${e.errorMessage ?? '알 수 없는 오류'}`)

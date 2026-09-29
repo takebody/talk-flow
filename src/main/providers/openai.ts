@@ -14,6 +14,7 @@ import {
   buildMinutesPrompt,
   buildTranslationPrompt,
   fail,
+  getSttPrompt,
   httpFetch,
   httpJson,
   minutesParseError,
@@ -22,9 +23,7 @@ import {
   parseMinutesContent,
   Provider,
   ProviderContext,
-  REQUEST_TIMEOUT_MS,
-  STT_PROMPT_AUTO,
-  STT_PROMPT_EN
+  REQUEST_TIMEOUT_MS
 } from './base'
 
 interface ChatCompletion {
@@ -65,8 +64,8 @@ export function makeOpenAiCompatible(config: {
       form.append('file', new Blob([req.wav], { type: 'audio/wav' }), 'utterance.wav')
       form.append('model', config.sttModel(ctx))
       form.append('response_format', 'json')
-      form.append('prompt', req.languageHint === 'en' ? STT_PROMPT_EN : STT_PROMPT_AUTO)
-      if (req.languageHint === 'en' || req.languageHint === 'ko') {
+      form.append('prompt', getSttPrompt(req.languageHint, req.languagePair))
+      if (req.languageHint === 'en' || req.languageHint === 'ko' || req.languageHint === 'ja') {
         form.append('language', req.languageHint)
       }
 
@@ -92,7 +91,7 @@ export function makeOpenAiCompatible(config: {
         const transcript = (parsed.text ?? '').trim()
         if (!transcript) return { ok: false, error: fail('EMPTY', '인식된 음성이 없습니다.') }
 
-        const detected = detectLanguage(transcript)
+        const detected = detectLanguage(transcript, req.languagePair)
         return {
           ok: true,
           value: {

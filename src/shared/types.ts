@@ -7,8 +7,9 @@ export type ProviderId = 'openai' | 'gemini' | 'anthropic'
  * Claude(Anthropic) API는 오디오 입력을 받지 않으므로 STT 후보에서 제외된다.
  */
 export type SttProviderId = Exclude<ProviderId, 'anthropic'>
-export type Lang = 'en' | 'ko'
+export type Lang = 'en' | 'ko' | 'ja'
 export type DetectedLang = Lang | 'unknown'
+export type LanguagePair = 'en-ko' | 'ja-ko'
 export type CaptureMode = 'online' | 'offline'
 export type Direction = 'incoming' | 'outgoing'
 export type EntrySource = 'loopback' | 'mic' | 'text'
@@ -83,6 +84,32 @@ export interface GlossaryEntry {
   note?: string
 }
 
+export type SpeakerGender = 'male' | 'female' | 'unknown'
+
+/** 목소리의 톤, 억양, 발음, 성별 등 화자 음향/음성 특성 */
+export interface VoiceProfile {
+  gender?: SpeakerGender
+  tone?: string
+  accent?: string
+  pronunciation?: string
+  summary?: string
+  pitchHz?: number
+}
+
+/** 회의 참석자 (화자) */
+export interface Participant {
+  id: string
+  name: string
+  colorIndex: number
+  gender?: SpeakerGender
+  tone?: string
+  accent?: string
+  pronunciation?: string
+  summary?: string
+  utteranceCount: number
+  lastSpokeAt: string
+}
+
 export interface ConversationEntry {
   id: string
   timestamp: string
@@ -100,6 +127,11 @@ export interface ConversationEntry {
   /** 언어 판정이 불확실해 사용자 확인이 필요한 항목 */
   needsReview?: boolean
   audioSeconds?: number
+  /** 참석자(화자) 식별 정보 및 목소리 특성 */
+  speakerId?: string
+  speakerName?: string
+  voiceProfile?: VoiceProfile
+  colorIndex?: number
 }
 
 export interface SessionMeta {
@@ -107,6 +139,7 @@ export interface SessionMeta {
   startedAt: string
   endedAt?: string
   mode: CaptureMode
+  languagePair?: LanguagePair
   sttProvider: SttProviderId
   translationProvider: ProviderId
   entryCount: number
@@ -187,6 +220,8 @@ export interface ProviderConfig {
 
 export interface Settings {
   consent: { accepted: boolean; acceptedAt?: string }
+  /** 회의 언어 쌍 (기본: 'en-ko') */
+  languagePair: LanguagePair
   /** 음성 인식 담당 제공자 */
   sttProvider: SttProviderId
   /** 번역 담당 제공자 */
@@ -245,6 +280,7 @@ export interface TranscribeRequest {
   wav: ArrayBuffer
   durationMs: number
   languageHint?: Lang | 'auto'
+  languagePair?: LanguagePair
 }
 
 export interface TranscribeResponse {
@@ -252,6 +288,7 @@ export interface TranscribeResponse {
   detectedLanguage: DetectedLang
   languageConfidence: number
   usage?: Usage
+  voiceProfile?: VoiceProfile
 }
 
 /** 전사와 번역을 한 번의 호출로 처리한 결과 */
@@ -264,6 +301,7 @@ export interface TranscribeTranslateResponse {
   usage?: Usage
   /** 실제로 발생한 AI 요청 수 (사용량 미터용) */
   requests: number
+  voiceProfile?: VoiceProfile
 }
 
 export interface TranslateRequest {

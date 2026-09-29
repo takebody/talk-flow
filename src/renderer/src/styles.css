@@ -40,6 +40,47 @@
   --out-bg: #f0ece4;
   --shadow: 0 1px 2px rgb(13 13 13 / 6%), 0 6px 18px rgb(13 13 13 / 5%);
 
+  /* 회의 참석자 및 목소리 특성별 색상 팔레트 (Light) */
+  --speaker-0-border: #2563eb;
+  --speaker-0-bg: #f2f7ff;
+  --speaker-0-pill: #dbeafe;
+  --speaker-0-text: #1d4ed8;
+
+  --speaker-1-border: #059669;
+  --speaker-1-bg: #f1fcf5;
+  --speaker-1-pill: #d1fae5;
+  --speaker-1-text: #047857;
+
+  --speaker-2-border: #d97706;
+  --speaker-2-bg: #fffcf2;
+  --speaker-2-pill: #fef3c7;
+  --speaker-2-text: #b45309;
+
+  --speaker-3-border: #7c3aed;
+  --speaker-3-bg: #f8f5ff;
+  --speaker-3-pill: #ede9fe;
+  --speaker-3-text: #6d28d9;
+
+  --speaker-4-border: #db2777;
+  --speaker-4-bg: #fdf2f8;
+  --speaker-4-pill: #fce7f3;
+  --speaker-4-text: #be185d;
+
+  --speaker-5-border: #0891b2;
+  --speaker-5-bg: #f0fdfa;
+  --speaker-5-pill: #cffafe;
+  --speaker-5-text: #0e7490;
+
+  --speaker-6-border: #ea580c;
+  --speaker-6-bg: #fff8f3;
+  --speaker-6-pill: #ffedd5;
+  --speaker-6-text: #c2410c;
+
+  --speaker-7-border: #4f46e5;
+  --speaker-7-bg: #f3f4ff;
+  --speaker-7-pill: #e0e7ff;
+  --speaker-7-text: #3730a3;
+
   --fs-base: 13px;
   --fs-entry: 14px;
   --gap: 12px;
@@ -74,6 +115,47 @@
   --in-bg: #1c1c1c;
   --out-bg: #262220;
   --shadow: 0 1px 2px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 35%);
+
+  /* 회의 참석자 및 목소리 특성별 색상 팔레트 (Dark) */
+  --speaker-0-border: #3b82f6;
+  --speaker-0-bg: #132238;
+  --speaker-0-pill: #1e3a8a;
+  --speaker-0-text: #bfdbfe;
+
+  --speaker-1-border: #10b981;
+  --speaker-1-bg: #0f2b20;
+  --speaker-1-pill: #064e3b;
+  --speaker-1-text: #a7f3d0;
+
+  --speaker-2-border: #f59e0b;
+  --speaker-2-bg: #2b220e;
+  --speaker-2-pill: #78350f;
+  --speaker-2-text: #fde68a;
+
+  --speaker-3-border: #8b5cf6;
+  --speaker-3-bg: #221838;
+  --speaker-3-pill: #4c1d95;
+  --speaker-3-text: #ddd6fe;
+
+  --speaker-4-border: #f43f5e;
+  --speaker-4-bg: #2e1520;
+  --speaker-4-pill: #881337;
+  --speaker-4-text: #fecdd3;
+
+  --speaker-5-border: #06b6d4;
+  --speaker-5-bg: #0f272e;
+  --speaker-5-pill: #164e63;
+  --speaker-5-text: #a5f3fc;
+
+  --speaker-6-border: #fb923c;
+  --speaker-6-bg: #2a190f;
+  --speaker-6-pill: #7c2d12;
+  --speaker-6-text: #fed7aa;
+
+  --speaker-7-border: #6366f1;
+  --speaker-7-bg: #191838;
+  --speaker-7-pill: #312e81;
+  --speaker-7-text: #c7d2fe;
 }
 
 :root[data-font-scale='0'] {
@@ -498,16 +580,87 @@ kbd {
   position: relative;
   min-height: 0;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
 }
 
 .conversation__scroll {
-  height: 100%;
+  flex: 1;
   overflow-y: auto;
   padding: var(--gap);
   display: flex;
   flex-direction: column;
   gap: calc(var(--gap) * 0.7);
   scrollbar-width: thin;
+}
+
+/* 상단 회의 참석자 바 */
+.participants-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--gap);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex-shrink: 0;
+}
+.participants-bar__label {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.participant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-sunken);
+  font-size: 0.8em;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.participant-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+.participant-chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+.participant-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.chip--me .participant-chip__dot { background: var(--accent); }
+.chip--speaker-0 .participant-chip__dot { background: var(--speaker-0-border); }
+.chip--speaker-1 .participant-chip__dot { background: var(--speaker-1-border); }
+.chip--speaker-2 .participant-chip__dot { background: var(--speaker-2-border); }
+.chip--speaker-3 .participant-chip__dot { background: var(--speaker-3-border); }
+.chip--speaker-4 .participant-chip__dot { background: var(--speaker-4-border); }
+.chip--speaker-5 .participant-chip__dot { background: var(--speaker-5-border); }
+.chip--speaker-6 .participant-chip__dot { background: var(--speaker-6-border); }
+.chip--speaker-7 .participant-chip__dot { background: var(--speaker-7-border); }
+
+.participant-chip__summary {
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+.participant-chip__count {
+  font-size: 0.85em;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--border);
+  color: var(--text-dim);
 }
 
 .empty {
@@ -536,6 +689,7 @@ kbd {
   border-radius: var(--radius);
   background: var(--in-bg);
   box-shadow: var(--shadow);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .entry--in {
@@ -547,7 +701,140 @@ kbd {
   align-self: flex-end;
   background: var(--out-bg);
   /* 내 발화는 브랜드 레드 스트라이프로 구분한다 (색상만이 아니라 위치·라벨도 함께) */
-  border-right: 2px solid var(--accent);
+  border-right: 3px solid var(--accent);
+}
+
+/* 참석자 및 목소리 특성별 말풍선 색상 (8색 테마) */
+.entry--speaker-0 {
+  border-left: 3.5px solid var(--speaker-0-border);
+  background: var(--speaker-0-bg);
+}
+.entry--speaker-0 .speaker-badge {
+  background: var(--speaker-0-pill);
+  color: var(--speaker-0-text);
+  border-color: var(--speaker-0-border);
+}
+
+.entry--speaker-1 {
+  border-left: 3.5px solid var(--speaker-1-border);
+  background: var(--speaker-1-bg);
+}
+.entry--speaker-1 .speaker-badge {
+  background: var(--speaker-1-pill);
+  color: var(--speaker-1-text);
+  border-color: var(--speaker-1-border);
+}
+
+.entry--speaker-2 {
+  border-left: 3.5px solid var(--speaker-2-border);
+  background: var(--speaker-2-bg);
+}
+.entry--speaker-2 .speaker-badge {
+  background: var(--speaker-2-pill);
+  color: var(--speaker-2-text);
+  border-color: var(--speaker-2-border);
+}
+
+.entry--speaker-3 {
+  border-left: 3.5px solid var(--speaker-3-border);
+  background: var(--speaker-3-bg);
+}
+.entry--speaker-3 .speaker-badge {
+  background: var(--speaker-3-pill);
+  color: var(--speaker-3-text);
+  border-color: var(--speaker-3-border);
+}
+
+.entry--speaker-4 {
+  border-left: 3.5px solid var(--speaker-4-border);
+  background: var(--speaker-4-bg);
+}
+.entry--speaker-4 .speaker-badge {
+  background: var(--speaker-4-pill);
+  color: var(--speaker-4-text);
+  border-color: var(--speaker-4-border);
+}
+
+.entry--speaker-5 {
+  border-left: 3.5px solid var(--speaker-5-border);
+  background: var(--speaker-5-bg);
+}
+.entry--speaker-5 .speaker-badge {
+  background: var(--speaker-5-pill);
+  color: var(--speaker-5-text);
+  border-color: var(--speaker-5-border);
+}
+
+.entry--speaker-6 {
+  border-left: 3.5px solid var(--speaker-6-border);
+  background: var(--speaker-6-bg);
+}
+.entry--speaker-6 .speaker-badge {
+  background: var(--speaker-6-pill);
+  color: var(--speaker-6-text);
+  border-color: var(--speaker-6-border);
+}
+
+.entry--speaker-7 {
+  border-left: 3.5px solid var(--speaker-7-border);
+  background: var(--speaker-7-bg);
+}
+.entry--speaker-7 .speaker-badge {
+  background: var(--speaker-7-pill);
+  color: var(--speaker-7-text);
+  border-color: var(--speaker-7-border);
+}
+
+/* 화자 뱃지 */
+.speaker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 12px;
+  font-size: 0.88em;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: var(--bg-sunken);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.speaker-badge:hover {
+  opacity: 0.85;
+  transform: scale(1.02);
+}
+.speaker-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.speaker-name-input {
+  padding: 1px 6px;
+  font-size: 0.85em;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--bg-raised);
+  color: var(--text);
+  max-width: 120px;
+}
+
+/* 목소리 특성 뱃지 */
+.voice-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 0.76em;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .entry__head {

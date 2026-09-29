@@ -203,7 +203,7 @@ Talk-Flow는 다음 두 흐름을 제공한다.
 |---|---|---|
 | OpenAI | `gpt-4o-transcribe` | `gpt-4.1-mini` |
 | Azure OpenAI | 사용자 지정 배포명 (`gpt-4o-transcribe` 계열) | 사용자 지정 배포명 |
-| Google Gemini | `gemini-2.5-flash` (오디오 입력 전사) | `gemini-2.5-flash` |
+| Google Gemini | `gemini-flash-latest` (오디오 입력 전사) | `gemini-flash-latest` |
 
 - **모든 AI 호출은 Electron Main 프로세스에서만 수행한다.** 렌더러는 오디오/텍스트만 IPC로 전달하고 API Key를 절대 받지 않는다.
 - Main의 HTTP 요청은 Node 전역 `fetch`가 아니라 **Electron `net.fetch`** 를 사용한다. 기업 환경의 TLS 검사 프록시와 시스템 프록시를 지원하기 위한 필수 조건이다(13장 리스크 표 참조).

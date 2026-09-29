@@ -1,3 +1,5 @@
+import type { LanguagePair } from '@shared/types'
+import { LANGUAGE_PAIRS } from '@shared/defaults'
 import { useStore } from '../store'
 import { LevelMeter } from './LevelMeter'
 
@@ -30,6 +32,7 @@ export function StatusBar(): React.JSX.Element {
   const speaking = useStore((s) => s.speaking)
   const mode = useStore((s) => s.mode)
   const setMode = useStore((s) => s.setMode)
+  const setLanguagePair = useStore((s) => s.setLanguagePair)
   const start = useStore((s) => s.start)
   const pause = useStore((s) => s.pause)
   const resume = useStore((s) => s.resume)
@@ -138,6 +141,21 @@ export function StatusBar(): React.JSX.Element {
         >
           <option value="online">온라인 회의</option>
           <option value="offline">오프라인 회의</option>
+        </select>
+
+        <select
+          className="select select--compact"
+          value={settings.languagePair ?? 'en-ko'}
+          disabled={running}
+          onChange={(e) => void setLanguagePair(e.target.value as LanguagePair)}
+          aria-label="회의 언어"
+          title={running ? '통역 중에는 회의 언어를 변경할 수 없습니다.' : '회의 언어'}
+        >
+          {LANGUAGE_PAIRS.map((lp) => (
+            <option key={lp.id} value={lp.id}>
+              {lp.label}
+            </option>
+          ))}
         </select>
 
         <LevelMeter />

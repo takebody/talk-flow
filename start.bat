@@ -4,9 +4,9 @@ title Talk-Flow (Backend + Frontend)
 cd /d "%~dp0"
 
 echo ====================================================================
-echo   Talk-Flow 개발 모드 실행
-echo   - 백엔드 (Electron Main Process)
-echo   - 프론트엔드 (Vite + React 19 UI)
+echo   Talk-Flow 통합 개발 환경 실행
+echo   - 백엔드 (Electron Main Process : AI 어댑터, 세션 저장소, IPC)
+echo   - 프론트엔드 (Vite + React 19 UI : 오디오 캡처 VAD, 대화창)
 echo ====================================================================
 echo.
 
@@ -15,7 +15,7 @@ if %errorlevel% neq 0 goto NO_NODE
 
 if exist "node_modules" goto RUN_DEV
 
-echo [알림] 의존성 패키지를 설치합니다. 잠시만 기다려 주세요...
+echo [알림] node_modules 폴더가 없습니다. 의존성 패키지를 먼저 설치합니다...
 echo.
 call npm install
 if %errorlevel% neq 0 goto INSTALL_ERROR
@@ -29,8 +29,8 @@ if not exist "node_modules\electron\dist\electron.exe" (
     call node node_modules\electron\install.js
 )
 
-echo [알림] 백엔드와 프론트엔드를 동시에 실행합니다...
-echo [안내] 앱을 종료하려면 이 창을 닫으세요.
+echo [알림] 백엔드(Electron Main)와 프론트엔드(Vite React)를 동시에 실행합니다...
+echo [안내] 앱을 종료하려면 이 콘솔 창을 닫거나 Ctrl+C를 누르세요.
 echo.
 
 call npm run dev
@@ -49,5 +49,5 @@ goto APP_END
 
 :APP_END
 echo.
-echo [알림] 앱이 종료되었습니다.
+echo [알림] 작업이 완료되었거나 애플리케이션이 종료되었습니다.
 pause

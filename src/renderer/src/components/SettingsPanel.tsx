@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import type {
   AppInfo,
   DiagnosticsItem,
+  LanguagePair,
   ModelInfo,
   ProviderId,
   SessionMeta,
   SttProviderId
 } from '@shared/types'
+import { LANGUAGE_PAIRS } from '@shared/defaults'
 import { validateApiKey } from '@shared/apiKey'
 import { useStore } from '../store'
 import {
@@ -209,7 +211,7 @@ function ProviderSection(): React.JSX.Element {
 
       <Field
         label="번역 제공자"
-        hint="영어↔한국어 번역을 담당합니다. 음성 인식과 다른 제공자를 지정해도 됩니다."
+        hint="실시간 번역을 담당합니다. 음성 인식과 다른 제공자를 지정해도 됩니다."
       >
         <div className="providers" role="radiogroup" aria-label="번역 제공자">
           {PROVIDER_ORDER.map((id) => (
@@ -533,7 +535,8 @@ function AudioSection(): React.JSX.Element {
         requestId: crypto.randomUUID(),
         wav: sample.wav,
         durationMs: sample.durationMs,
-        languageHint: 'auto'
+        languageHint: 'auto',
+        languagePair: settings.languagePair
       })
       setTestResult(
         result.ok
@@ -550,6 +553,23 @@ function AudioSection(): React.JSX.Element {
 
   return (
     <section className="section">
+      <Field
+        label="기본 회의 언어"
+        hint="통역할 언어 쌍을 선택합니다. 메인 화면 상태 바에서도 언제든지 변경할 수 있습니다."
+      >
+        <select
+          className="select"
+          value={settings.languagePair ?? 'en-ko'}
+          onChange={(e) => void patchSettings({ languagePair: e.target.value as LanguagePair })}
+        >
+          {LANGUAGE_PAIRS.map((lp) => (
+            <option key={lp.id} value={lp.id}>
+              {lp.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
       <Field label="기본 통역 모드">
         <select
           className="select"

@@ -106,7 +106,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   ipcMain.handle(IPC.sessionStart, (_e, mode: CaptureMode) => {
     const s = getSettings()
-    return sessions.startSession(mode, s.sttProvider, s.translationProvider)
+    return sessions.startSession(mode, s.sttProvider, s.translationProvider, s.languagePair)
   })
 
   ipcMain.handle(

@@ -12,19 +12,86 @@ function timeOf(iso: string): string {
 function EntryCard({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const retryEntry = useStore((s) => s.retryEntry)
   const reclassify = useStore((s) => s.reclassify)
+  const renameParticipant = useStore((s) => s.renameParticipant)
   const setBanner = useStore((s) => s.setBanner)
   const incoming = entry.direction === 'incoming'
+
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+
+  const speakerName = entry.speakerName || (incoming ? '상대방' : '나')
+  const speakerClass = incoming
+    ? `entry--speaker-${(entry.colorIndex ?? 0) % 8}`
+    : 'entry--out'
+
+  const handleStartRename = () => {
+    if (!entry.speakerId) return
+    setNameInput(speakerName)
+    setEditingName(true)
+  }
+
+  const handleSaveRename = () => {
+    if (entry.speakerId && nameInput.trim()) {
+      renameParticipant(entry.speakerId, nameInput.trim())
+    }
+    setEditingName(false)
+  }
+
+  const handleNameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSaveRename()
+    else if (e.key === 'Escape') setEditingName(false)
+  }
 
   const copy = async (text: string) => {
     await window.talkflow.app.copyToClipboard(text)
     setBanner({ kind: 'info', message: '클립보드에 복사했습니다.' })
   }
 
+  const vp = entry.voiceProfile
+  const voiceDetailTooltip = vp
+    ? [
+        vp.gender ? `성별: ${vp.gender === 'female' ? '여성' : vp.gender === 'male' ? '남성' : '알 수 없음'}` : null,
+        vp.tone ? `톤/피치: ${vp.tone}${vp.pitchHz ? ` (${vp.pitchHz}Hz)` : ''}` : null,
+        vp.accent ? `억양: ${vp.accent}` : null,
+        vp.pronunciation ? `발음: ${vp.pronunciation}` : null
+      ]
+        .filter(Boolean)
+        .join(' | ')
+    : ''
+
   return (
-    <article className={`entry ${incoming ? 'entry--in' : 'entry--out'}`}>
+    <article className={`entry ${incoming ? 'entry--in' : 'entry--out'} ${speakerClass}`}>
       <div className="entry__head">
-        <span className="entry__who">{incoming ? '상대방' : '나'}</span>
+        {editingName ? (
+          <input
+            type="text"
+            className="speaker-name-input"
+            value={nameInput}
+            autoFocus
+            onChange={(e) => setNameInput(e.target.value)}
+            onBlur={handleSaveRename}
+            onKeyDown={handleNameKeyDown}
+          />
+        ) : (
+          <button
+            type="button"
+            className="speaker-badge"
+            onClick={handleStartRename}
+            title={entry.speakerId ? '클릭하여 참석자 이름 변경' : undefined}
+          >
+            <span className="speaker-badge__dot" aria-hidden="true" />
+            <span className="entry__who">{speakerName}</span>
+          </button>
+        )}
+
+        {vp?.summary && (
+          <span className="voice-tag" title={voiceDetailTooltip}>
+            🎙️ {vp.summary}
+          </span>
+        )}
+
         <span className="entry__time">{timeOf(entry.timestamp)}</span>
+
         {entry.needsReview && (
           <span className="badge badge--warn" title="언어 자동 판정이 불확실합니다.">
             언어 미확정
@@ -101,12 +168,23 @@ function EntryCard({ entry }: { entry: ConversationEntry }): React.JSX.Element {
 
 export function ConversationView(): React.JSX.Element {
   const entries = useStore((s) => s.entries)
+  const participants = useStore((s) => s.participants)
+  const selectedSpeakerId = useStore((s) => s.selectedSpeakerId)
+  const setSelectedSpeakerId = useStore((s) => s.setSelectedSpeakerId)
   const mode = useStore((s) => s.mode)
   const status = useStore((s) => s.status)
+  const languagePair = useStore((s) => s.settings.languagePair)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
   const [unseen, setUnseen] = useState(0)
   const lastCount = useRef(entries.length)
+
+  const partnerLabel = languagePair === 'ja-ko' ? '일본어' : '영어'
+
+  // 특정 참석자 필터링이 활성화된 경우
+  const visibleEntries = selectedSpeakerId
+    ? entries.filter((e) => e.speakerId === selectedSpeakerId)
+    : entries
 
   // 사용자가 위로 스크롤해 이전 기록을 보는 동안에는 강제로 내리지 않는다 (FR-05).
   const onScroll = () => {
@@ -122,18 +200,18 @@ export function ConversationView(): React.JSX.Element {
     if (!el) return
     if (pinned) {
       el.scrollTop = el.scrollHeight
-    } else if (entries.length > lastCount.current) {
-      setUnseen((n) => n + (entries.length - lastCount.current))
+    } else if (visibleEntries.length > lastCount.current) {
+      setUnseen((n) => n + (visibleEntries.length - lastCount.current))
     }
-    lastCount.current = entries.length
-  }, [entries, pinned])
+    lastCount.current = visibleEntries.length
+  }, [visibleEntries, pinned])
 
   useEffect(() => {
-    if (entries.length === 0) {
+    if (visibleEntries.length === 0) {
       setPinned(true)
       setUnseen(0)
     }
-  }, [entries.length])
+  }, [visibleEntries.length])
 
   const jumpToLatest = () => {
     const el = scrollRef.current
@@ -145,6 +223,37 @@ export function ConversationView(): React.JSX.Element {
 
   return (
     <div className="conversation">
+      {participants.length > 0 && (
+        <div className="participants-bar" role="toolbar" aria-label="회의 참석자 필터">
+          <span className="participants-bar__label">참석자:</span>
+          <button
+            type="button"
+            className={`participant-chip ${selectedSpeakerId === null ? 'is-active' : ''}`}
+            onClick={() => setSelectedSpeakerId(null)}
+          >
+            전체 ({entries.length})
+          </button>
+          {participants.map((p) => {
+            const isMe = p.id === 'me'
+            const colorClass = isMe ? 'chip--me' : `chip--speaker-${(p.colorIndex ?? 0) % 8}`
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`participant-chip ${colorClass} ${selectedSpeakerId === p.id ? 'is-active' : ''}`}
+                onClick={() => setSelectedSpeakerId(selectedSpeakerId === p.id ? null : p.id)}
+                title={`${p.name}: ${p.summary || '목소리 특성 분석됨'} (클릭 시 이 참석자의 발화만 필터링)`}
+              >
+                <span className="participant-chip__dot" aria-hidden="true" />
+                <span className="participant-chip__name">{p.name}</span>
+                {p.summary && <span className="participant-chip__summary">· {p.summary}</span>}
+                <span className="participant-chip__count">{p.utteranceCount}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       <div
         className="conversation__scroll"
         ref={scrollRef}
@@ -153,23 +262,26 @@ export function ConversationView(): React.JSX.Element {
         aria-live="polite"
         aria-label="대화 기록"
       >
-        {entries.length === 0 ? (
+        {visibleEntries.length === 0 ? (
           <div className="empty">
             <p className="empty__title">
-              {status === 'capturing' ? '음성을 기다리고 있습니다.' : '아직 대화가 없습니다.'}
+              {status === 'capturing'
+                ? selectedSpeakerId
+                  ? '해당 참석자의 발화가 없습니다.'
+                  : '음성을 기다리고 있습니다.'
+                : '아직 대화가 없습니다.'}
             </p>
             <p className="empty__hint">
               {mode === 'online'
-                ? 'Webex 또는 Teams 회의에 참여한 뒤 통역 시작을 누르세요. 상대방의 영어 발화가 영어 원문과 한국어 번역으로 표시됩니다.'
-                : '통역 시작을 누르면 마이크로 들어오는 한국어·영어 발화를 자동으로 구분해 서로 반대 언어로 번역합니다.'}
+                ? `Webex 또는 Teams 회의에 참여한 뒤 통역 시작을 누르세요. 상대방의 ${partnerLabel} 발화가 ${partnerLabel} 원문과 한국어 번역으로 표시됩니다.`
+                : `통역 시작을 누르면 마이크로 들어오는 한국어·${partnerLabel} 발화를 자동으로 구분해 서로 반대 언어로 번역합니다.`}
             </p>
             <p className="empty__hint">
-              아래 입력창에 한국어를 적고 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 를 누르면 영어 번역문이
-              같은 대화 흐름에 표시됩니다.
+              목소리 톤(고저·중저음), 억양, 발음 특성 및 성별에 따라 각 회의 참석자별로 색상이 구분되어 표시됩니다.
             </p>
           </div>
         ) : (
-          entries.map((entry) => <EntryCard key={entry.id} entry={entry} />)
+          visibleEntries.map((entry) => <EntryCard key={entry.id} entry={entry} />)
         )}
       </div>
 

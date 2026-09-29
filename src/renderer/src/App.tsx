@@ -58,12 +58,14 @@ export function App(): React.JSX.Element {
       }
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c') {
         event.preventDefault()
-        const lastEnglish = [...store.entries]
+        const partnerLang = store.settings.languagePair === 'ja-ko' ? 'ja' : 'en'
+        const partnerLabel = partnerLang === 'ja' ? '일본어' : '영어'
+        const lastPartner = [...store.entries]
           .reverse()
-          .find((e) => e.targetLanguage === 'en' && e.translatedText)
-        if (lastEnglish?.translatedText) {
-          void window.talkflow.app.copyToClipboard(lastEnglish.translatedText)
-          store.setBanner({ kind: 'info', message: '마지막 영어 번역문을 복사했습니다.' })
+          .find((e) => e.targetLanguage === partnerLang && e.translatedText)
+        if (lastPartner?.translatedText) {
+          void window.talkflow.app.copyToClipboard(lastPartner.translatedText)
+          store.setBanner({ kind: 'info', message: `마지막 ${partnerLabel} 번역문을 복사했습니다.` })
         }
       }
     }

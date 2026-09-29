@@ -37,7 +37,7 @@ export function buildTranscript(
   limit = MINUTES_TRANSCRIPT_LIMIT
 ): { text: string; truncated: boolean } {
   const lines = usableEntries(entries).map((e) => {
-    const who = e.direction === 'incoming' ? '상대방' : '나'
+    const who = e.speakerName || (e.direction === 'incoming' ? '상대방' : '나')
     const head = `[${timeOf(e.timestamp)}] ${who}: ${e.sourceText.trim()}`
     // 번역문이 원문과 같으면(이미 목표 언어였던 경우) 중복으로 넣지 않는다.
     const translated = e.translatedText?.trim()

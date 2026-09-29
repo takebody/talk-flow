@@ -5,9 +5,12 @@ import { useStore } from '../store'
 export function ComposeBar(): React.JSX.Element {
   const submitText = useStore((s) => s.submitText)
   const busy = useStore((s) => s.busyCount > 0)
+  const languagePair = useStore((s) => s.settings.languagePair)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+
+  const partnerLabel = languagePair === 'ja-ko' ? '일본어' : '영어'
 
   const send = async () => {
     const value = text.trim()
@@ -37,7 +40,7 @@ export function ComposeBar(): React.JSX.Element {
       <textarea
         ref={areaRef}
         className="compose__input"
-        placeholder="한국어를 입력하세요 — Ctrl+Enter 로 영어 번역"
+        placeholder={`한국어를 입력하세요 — Ctrl+Enter 로 ${partnerLabel} 번역`}
         value={text}
         rows={2}
         onChange={(e) => setText(e.target.value)}

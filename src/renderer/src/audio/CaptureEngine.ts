@@ -1,4 +1,4 @@
-import type { CaptureMode, Settings, VadSensitivity } from '@shared/types'
+import type { CaptureMode, Settings, VadSensitivity, VoiceProfile } from '@shared/types'
 import {
   CAPTURE_SAMPLE_RATE,
   VAD_ABSOLUTE_FLOOR,
@@ -10,12 +10,14 @@ import {
 } from '@shared/defaults'
 import { encodeWav } from './wav'
 import { WORKLET_PROCESSOR_NAME, workletModuleUrl } from './worklet'
+import { analyzeVoiceFromAudio } from './voiceAnalyzer'
 
 export interface Utterance {
   wav: Uint8Array
   durationMs: number
   /** 발화가 끝난 시각 (지연 계산 기준점) */
   endedAt: number
+  acousticProfile?: VoiceProfile
 }
 
 export interface CaptureCallbacks {
@@ -165,10 +167,12 @@ export class CaptureEngine {
       settings.audio.silenceMs,
       settings.audio.maxUtteranceMs,
       (samples) => {
+        const acousticProfile = analyzeVoiceFromAudio(samples, CAPTURE_SAMPLE_RATE)
         callbacks.onUtterance({
           wav: encodeWav(samples, CAPTURE_SAMPLE_RATE),
           durationMs: (samples.length / CAPTURE_SAMPLE_RATE) * 1000,
-          endedAt: Date.now()
+          endedAt: Date.now(),
+          acousticProfile
         })
       }
     )

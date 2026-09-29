@@ -1,4 +1,4 @@
-import type { ProviderId, Settings, SttProviderId, VadSensitivity } from './types'
+import type { LanguagePair, ProviderId, Settings, SttProviderId, VadSensitivity } from './types'
 
 /** 지원하는 AI 제공자 전체 목록 (번역 기준) */
 export const PROVIDER_IDS: ProviderId[] = ['openai', 'gemini', 'anthropic']
@@ -11,6 +11,12 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   gemini: 'Google Gemini',
   anthropic: 'Anthropic Claude'
 }
+
+/** 지원하는 회의 언어 쌍 목록 */
+export const LANGUAGE_PAIRS: { id: LanguagePair; label: string; partnerLabel: string }[] = [
+  { id: 'en-ko', label: '영어 ⇄ 한국어', partnerLabel: '영어' },
+  { id: 'ja-ko', label: '일본어 ⇄ 한국어', partnerLabel: '일본어' }
+]
 
 export const IPC = {
   settingsGet: 'settings:get',
@@ -68,11 +74,12 @@ export function defaultSettings(): Settings {
      * 저장은 되지만 다시 읽을 때 조용히 버려진다.
      */
     consent: { accepted: false, acceptedAt: undefined },
-    sttProvider: 'openai',
-    translationProvider: 'openai',
+    languagePair: 'en-ko',
+    sttProvider: 'gemini',
+    translationProvider: 'gemini',
     providerConfig: {
       openai: { sttModel: 'gpt-4o-transcribe', chatModel: 'gpt-4.1-mini' },
-      gemini: { sttModel: 'gemini-2.5-flash', chatModel: 'gemini-2.5-flash' },
+      gemini: { sttModel: 'gemini-flash-latest', chatModel: 'gemini-flash-latest' },
       anthropic: { chatModel: 'claude-opus-5' }
     },
     // 요금은 네트워크에서 조회하지 않는다. 0이면 추정 비용을 표시하지 않는다.

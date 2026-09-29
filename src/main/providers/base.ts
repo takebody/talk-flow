@@ -2,6 +2,8 @@ import { net } from 'electron'
 import type {
   AiError,
   AiErrorCode,
+  Lang,
+  LanguagePair,
   MinutesContent,
   ModelInfo,
   Result,
@@ -302,7 +304,7 @@ export async function httpJson(
 
 /* ------------------------------------------------------- 공통 번역 프롬프트 */
 
-const LANG_NAME = { en: '영어', ko: '한국어' } as const
+const LANG_NAME = { en: '영어', ko: '한국어', ja: '일본어' } as const
 
 export function buildTranslationPrompt(req: TranslateRequest): { system: string; user: string } {
   const from = LANG_NAME[req.from]
@@ -315,6 +317,13 @@ export function buildTranslationPrompt(req: TranslateRequest): { system: string;
           .join('\n')}`
       : ''
 
+  const toneRule =
+    req.to === 'ko'
+      ? '6. 한국어는 격식체(-습니다/-니다)를 기본으로 하세요.'
+      : req.to === 'ja'
+        ? '6. 일본어는 비즈니스 정중체(デスマス調 / 丁寧語)를 기본으로 하세요.'
+        : '6. 영어는 명확하고 간결한 문장으로 쓰세요.'
+
   const system = [
     `당신은 비즈니스 화상회의 실시간 통역사입니다. ${from} 문장을 자연스러운 ${to}로 번역합니다.`,
     '규칙:',
@@ -323,9 +332,7 @@ export function buildTranslationPrompt(req: TranslateRequest): { system: string;
     '3. 고유명사, 제품명, 약어, 숫자, 단위는 원형을 유지하세요.',
     '4. 문장이 불완전하거나 잘려 있으면 추측해 채우지 말고 있는 그대로 번역하세요.',
     '5. 입력이 이미 목표 언어라면 그대로 반환하세요.',
-    req.to === 'ko'
-      ? '6. 한국어는 격식체(-습니다/-니다)를 기본으로 하세요.'
-      : '6. 영어는 명확하고 간결한 문장으로 쓰세요.'
+    toneRule
   ].join('\n')
 
   const context =
@@ -457,5 +464,19 @@ export function minutesParseError(): AiError {
 
 export const STT_PROMPT_EN =
   'This is business meeting audio in English. Transcribe verbatim with correct punctuation.'
-export const STT_PROMPT_AUTO =
+export const STT_PROMPT_JA =
+  'This is business meeting audio in Japanese. Transcribe verbatim with correct punctuation and kanji/kana.'
+export const STT_PROMPT_AUTO_EN =
   'This is business meeting audio containing Korean and/or English speech. Transcribe verbatim in the language actually spoken, with correct punctuation. Do not translate.'
+export const STT_PROMPT_AUTO_JA =
+  'This is business meeting audio containing Korean and/or Japanese speech. Transcribe verbatim in the language actually spoken, with correct punctuation and kanji/kana. Do not translate.'
+export const STT_PROMPT_AUTO = STT_PROMPT_AUTO_EN
+
+export function getSttPrompt(languageHint?: Lang | 'auto', languagePair?: LanguagePair): string {
+  if (languageHint === 'en') return STT_PROMPT_EN
+  if (languageHint === 'ja') return STT_PROMPT_JA
+  if (languageHint === 'ko') {
+    return 'This is business meeting audio in Korean. Transcribe verbatim with correct punctuation.'
+  }
+  return languagePair === 'ja-ko' ? STT_PROMPT_AUTO_JA : STT_PROMPT_AUTO_EN
+}
