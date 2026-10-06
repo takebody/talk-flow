@@ -20,42 +20,6 @@ export function setCurrentMinutes(minutes: Minutes): void {
 }
 
 export function getCurrentMinutes(): Minutes | null {
-  // [임시 검증용 — 제거 예정]
-  if (!current && process.env.TALKFLOW_DEMO_MINUTES) {
-    return {
-      sessionId: 'demo',
-      generatedAt: new Date().toISOString(),
-      startedAt: new Date(Date.now() - 42 * 60_000).toISOString(),
-      endedAt: new Date().toISOString(),
-      mode: 'online',
-      entryCount: 37,
-      provider: 'anthropic',
-      model: 'claude-opus-5',
-      savedPath: 'C:\\Users\\User\\Documents\\Talk-Flow 회의록\\회의록_2026-09-29-09-10_Q4 로드맵 검토.txt',
-      truncated: true,
-      title: 'Q4 로드맵 및 리소스 배분 검토',
-      summary:
-        '싱가포르 팀과 Q4 출시 범위를 검토했습니다. 결제 모듈은 11월 첫째 주로 미루고, 온보딩 개편을 먼저 내보내기로 했습니다.\n리소스 부족이 반복 지적되어 QA 인원 충원 검토가 필요합니다.',
-      keyPoints: [
-        '온보딩 개편은 A/B 테스트 결과가 긍정적이어서 전체 배포로 확대하는 방향입니다.',
-        '결제 모듈은 외부 PG 인증 일정이 확정되지 않아 날짜를 못 박기 어렵습니다.',
-        'QA 인원이 두 명뿐이라 릴리스가 겹치면 회귀 테스트를 다 돌릴 수 없습니다.'
-      ],
-      decisions: [
-        '온보딩 개편을 10월 3주차에 전체 배포합니다.',
-        '결제 모듈 출시는 11월 첫째 주로 연기합니다.'
-      ],
-      actionItems: [
-        { task: 'PG사에 인증 일정 재확인 후 공유', owner: '김대환', due: '10월 4일' },
-        { task: 'QA 충원 요청서 작성', owner: 'Sarah' },
-        { task: '온보딩 배포 체크리스트 갱신' }
-      ],
-      followUps: [
-        '싱가포르 팀 휴일이 배포 주간과 겹치는지 확인이 필요합니다.',
-        '"레이턴시 목표를 200ms로 한다"는 발언은 음성 인식이 불확실해 재확인이 필요합니다.'
-      ]
-    }
-  }
   return current
 }
 

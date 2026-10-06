@@ -24,10 +24,14 @@ echo [완료] 패키지 설치가 완료되었습니다.
 echo.
 
 :RUN_DEV
-if not exist "node_modules\electron\dist\electron.exe" (
-    echo [알림] Electron 실행 파일(바이너리) 확인 및 복구 중...
-    call node node_modules\electron\install.js
-)
+rem 괄호 블록 안에서는 echo 문장의 닫는 괄호가 블록을 먼저 닫아 버린다.
+rem 그래서 아래는 if ( ) 블록 대신 goto 로 분기한다.
+if exist "node_modules\electron\dist\electron.exe" goto RUN_APP
+
+echo [알림] Electron 실행 파일 바이너리를 확인하고 복구합니다...
+call node node_modules\electron\install.js
+
+:RUN_APP
 
 echo [알림] 백엔드(Electron Main)와 프론트엔드(Vite React)를 동시에 실행합니다...
 echo [안내] 앱을 종료하려면 이 콘솔 창을 닫거나 Ctrl+C를 누르세요.
@@ -50,4 +54,4 @@ goto APP_END
 :APP_END
 echo.
 echo [알림] 작업이 완료되었거나 애플리케이션이 종료되었습니다.
-pause
+pause
