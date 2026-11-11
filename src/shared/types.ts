@@ -186,6 +186,20 @@ export interface Minutes extends MinutesContent {
   truncated?: boolean
 }
 
+/** 저장된 회의록 목록의 한 줄 */
+export interface SavedMinutesMeta {
+  /** 'json:<파일명>' 또는 'txt:<파일명>' */
+  id: string
+  title: string
+  startedAt: string
+  mode?: CaptureMode
+  entryCount?: number
+  /** 회의록 텍스트 파일 경로 (있으면) */
+  path?: string
+  /** json = 앱이 보관한 원본 데이터, txt = 텍스트 파일만 있어 다시 읽어 들인 것 */
+  source: 'json' | 'txt'
+}
+
 export interface SummarizeRequest {
   requestId: string
   /** 회의록 생성 대상 대화 평문 */
@@ -269,7 +283,20 @@ export interface Settings {
     /** 0 = 무기한 */
     retentionDays: 0 | 7 | 30 | 90
   }
+  /** 회의록 메일 발송 */
+  email: {
+    /** 기본 수신인. 여러 명이면 쉼표(,) 또는 세미콜론(;)으로 구분한다. */
+    recipients: string
+  }
   window: { width: number; height: number; x?: number; y?: number }
+}
+
+export interface MailSendResult {
+  ok: boolean
+  /** 'outlook' = Outlook으로 바로 발송, 'mailto' = 기본 메일 앱 작성 창을 띄움 */
+  method?: 'outlook' | 'mailto'
+  recipients?: string[]
+  message?: string
 }
 
 /* ------------------------------------------------------------- IPC 요청/응답 */

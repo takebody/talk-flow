@@ -58,6 +58,8 @@ interface State {
   busyCount: number
   sessionList: SessionMeta[]
   settingsOpen: boolean
+  /** 저장된 회의록 메뉴 */
+  minutesMenuOpen: boolean
   /** 회의록 생성이 진행 중인지. 요청 한 번이 수십 초 걸릴 수 있다. */
   minutesBusy: boolean
 
@@ -81,6 +83,7 @@ interface State {
   reclassify(id: string, direction: Direction): Promise<void>
   dismissBanner(): void
   openSettings(open: boolean): void
+  openMinutesMenu(open: boolean): void
   refreshSessions(): Promise<void>
   setBanner(banner: Banner | null): void
   setSelectedSpeakerId(id: string | null): void
@@ -531,6 +534,7 @@ export const useStore = create<State>((set, get) => {
     busyCount: 0,
     sessionList: [],
     settingsOpen: false,
+    minutesMenuOpen: false,
     minutesBusy: false,
 
     async init() {
@@ -861,6 +865,10 @@ export const useStore = create<State>((set, get) => {
 
     setBanner(banner) {
       set({ banner })
+    },
+
+    openMinutesMenu(open) {
+      set({ minutesMenuOpen: open })
     },
 
     openSettings(open) {

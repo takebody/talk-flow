@@ -39,17 +39,36 @@
     ],
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "artifactName": "Talk-Flow-${version}-${arch}.${ext}"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Talk-Flow-${version}-Setup-${arch}.${ext}",
+      "shortcutName": "Talk-Flow",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "uninstallDisplayName": "Talk-Flow ${version}"
+    },
+    "portable": {
+      "artifactName": "Talk-Flow-${version}-Portable-${arch}.${ext}"
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.124.0"
+    "@anthropic-ai/sdk": "^0.124.0",
+    "@fontsource-variable/outfit": "^5.1.0"
   }
 }

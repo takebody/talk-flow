@@ -1,8 +1,9 @@
 import { BrowserWindow, app, shell } from 'electron'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { Minutes } from '@shared/types'
-import { minutesFileName, renderMinutesAsText } from '@shared/minutes'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
+import type { Minutes, SavedMinutesMeta } from '@shared/types'
+import { minutesFileName, parseMinutesText, renderMinutesAsText } from '@shared/minutes'
 
 /**
  * 회의록 보관과 표시.
@@ -47,6 +48,150 @@ export async function autoSaveMinutes(minutes: Minutes): Promise<string | null> 
     console.error('[minutes] 자동 저장 실패:', (err as Error).message)
     return null
   }
+}
+
+/* ------------------------------------------------------ 저장된 회의록 */
+
+/**
+ * 회의록 원본 데이터(JSON) 보관 폴더.
+ *
+ * 텍스트 파일은 사람이 읽는 문서라 창에 다시 띄우기에는 정보가 모자라다.
+ * 회의록 창을 그대로 다시 열 수 있도록 구조 데이터를 앱 데이터 폴더에 함께 둔다.
+ * 문서 폴더에는 사용자가 보는 .txt만 남긴다.
+ */
+function recordsDir(): string {
+  return join(app.getPath('userData'), 'minutes')
+}
+
+/** 세션 ID는 파일명으로 쓰므로 안전한 문자만 남긴다. */
+const safeId = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 80) || 'minutes'
+
+export async function storeMinutesRecord(minutes: Minutes): Promise<void> {
+  try {
+    await mkdir(recordsDir(), { recursive: true })
+    await writeFile(
+      join(recordsDir(), `${safeId(minutes.sessionId)}.json`),
+      JSON.stringify(minutes, null, 2),
+      'utf-8'
+    )
+  } catch (err) {
+    console.error('[minutes] 원본 보관 실패:', (err as Error).message)
+  }
+}
+
+async function readJsonRecords(): Promise<{ file: string; minutes: Minutes }[]> {
+  let files: string[]
+  try {
+    files = (await readdir(recordsDir())).filter((f) => f.endsWith('.json'))
+  } catch {
+    return []
+  }
+  const out: { file: string; minutes: Minutes }[] = []
+  for (const file of files) {
+    try {
+      const minutes = JSON.parse(await readFile(join(recordsDir(), file), 'utf-8')) as Minutes
+      if (minutes && typeof minutes.summary === 'string') out.push({ file, minutes })
+    } catch {
+      // 깨진 파일은 목록에서 뺀다.
+    }
+  }
+  return out
+}
+
+async function readTxtFiles(): Promise<{ file: string; path: string; mtime: Date }[]> {
+  let files: string[]
+  try {
+    files = (await readdir(minutesDir())).filter((f) => f.toLowerCase().endsWith('.txt'))
+  } catch {
+    return []
+  }
+  const out: { file: string; path: string; mtime: Date }[] = []
+  for (const file of files) {
+    const path = join(minutesDir(), file)
+    try {
+      out.push({ file, path, mtime: (await stat(path)).mtime })
+    } catch {
+      /* 그 사이 지워진 파일 */
+    }
+  }
+  return out
+}
+
+async function loadTxt(file: string, path: string, mtime: Date): Promise<Minutes | null> {
+  try {
+    return parseMinutesText(await readFile(path, 'utf-8'), {
+      id: `txt-${file}`,
+      modifiedAt: mtime.toISOString(),
+      path
+    })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 저장된 회의록 목록 (최신순).
+ *
+ * JSON 원본이 있는 회의록을 우선 쓰고, 문서 폴더에 텍스트 파일만 있는 회의록
+ * (이 기능 이전에 만들어졌거나 다른 PC에서 옮겨 온 것)은 텍스트를 읽어 되살린다.
+ * 텍스트 파일을 지운 회의록도 원본이 남아 있으면 계속 열 수 있다.
+ */
+export async function listSavedMinutes(): Promise<SavedMinutesMeta[]> {
+  const records = await readJsonRecords()
+  const known = new Set(
+    records.map((r) => r.minutes.savedPath?.toLowerCase()).filter((p): p is string => !!p)
+  )
+
+  const list: SavedMinutesMeta[] = records.map(({ file, minutes }) => ({
+    id: `json:${file}`,
+    title: minutes.title,
+    startedAt: minutes.startedAt,
+    mode: minutes.mode,
+    entryCount: minutes.entryCount,
+    path: minutes.savedPath && existsSync(minutes.savedPath) ? minutes.savedPath : undefined,
+    source: 'json'
+  }))
+
+  for (const txt of await readTxtFiles()) {
+    if (known.has(txt.path.toLowerCase())) continue
+    const minutes = await loadTxt(txt.file, txt.path, txt.mtime)
+    if (!minutes) continue // 회의록 형식이 아닌 텍스트 파일
+    list.push({
+      id: `txt:${txt.file}`,
+      title: minutes.title,
+      startedAt: minutes.startedAt,
+      mode: minutes.mode,
+      entryCount: minutes.entryCount,
+      path: txt.path,
+      source: 'txt'
+    })
+  }
+
+  return list.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
+
+/**
+ * 목록의 id로 회의록을 읽는다.
+ * id는 렌더러에서 오므로 경로로 바로 쓰지 않고, 폴더 안의 파일명과 정확히 맞을 때만 연다.
+ */
+export async function loadSavedMinutes(id: string): Promise<Minutes | null> {
+  const sep = id.indexOf(':')
+  const kind = id.slice(0, sep)
+  const file = id.slice(sep + 1)
+  if (!file || file !== basename(file)) return null
+
+  if (kind === 'json') {
+    const record = (await readJsonRecords()).find((r) => r.file === file)
+    if (!record) return null
+    const m = record.minutes
+    // 텍스트 파일이 지워졌으면 "폴더 열기"가 엉뚱한 곳을 가리키지 않게 경로를 지운다.
+    return { ...m, savedPath: m.savedPath && existsSync(m.savedPath) ? m.savedPath : undefined }
+  }
+  if (kind === 'txt') {
+    const txt = (await readTxtFiles()).find((t) => t.file === file)
+    return txt ? loadTxt(txt.file, txt.path, txt.mtime) : null
+  }
+  return null
 }
 
 /**

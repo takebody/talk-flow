@@ -1,7 +1,20 @@
-import type { LanguagePair } from '@shared/types'
+import type { CaptureMode, LanguagePair } from '@shared/types'
 import { LANGUAGE_PAIRS } from '@shared/defaults'
 import { useStore } from '../store'
 import { LevelMeter } from './LevelMeter'
+import { IconSelect, type IconSelectOption } from './IconSelect'
+import { LangPairLabel, ModeLabel } from './icons'
+import { MinutesMenu } from './MinutesMenu'
+
+const MODE_OPTIONS: IconSelectOption<CaptureMode>[] = [
+  { value: 'online', label: <ModeLabel mode="online" /> },
+  { value: 'offline', label: <ModeLabel mode="offline" /> }
+]
+
+const LANG_PAIR_OPTIONS: IconSelectOption<LanguagePair>[] = LANGUAGE_PAIRS.map((lp) => ({
+  value: lp.id,
+  label: <LangPairLabel pair={lp.id} />
+}))
 
 type StatusView = { label: string; tone: 'idle' | 'live' | 'busy' | 'warn' | 'error' }
 
@@ -110,6 +123,7 @@ export function StatusBar(): React.JSX.Element {
           </button>
         )}
 
+        <MinutesMenu />
         <button
           type="button"
           className={`btn btn--icon ${settings.display.alwaysOnTop ? 'is-active' : ''}`}
@@ -131,32 +145,25 @@ export function StatusBar(): React.JSX.Element {
 
       {/* 모드 선택은 2행으로 내렸다. 1행에 다 넣으면 480px 기본 폭에서 넘친다. */}
       <div className="statusbar__row statusbar__row--meta">
-        <select
-          className="select select--compact"
+        <IconSelect<CaptureMode>
+          compact
           value={mode}
           disabled={running}
-          onChange={(e) => setMode(e.target.value as 'online' | 'offline')}
-          aria-label="통역 모드"
+          onChange={setMode}
+          ariaLabel="통역 모드"
           title={running ? '통역 중에는 모드를 변경할 수 없습니다.' : '통역 모드'}
-        >
-          <option value="online">온라인 회의</option>
-          <option value="offline">오프라인 회의</option>
-        </select>
+          options={MODE_OPTIONS}
+        />
 
-        <select
-          className="select select--compact"
+        <IconSelect<LanguagePair>
+          compact
           value={settings.languagePair ?? 'en-ko'}
           disabled={running}
-          onChange={(e) => void setLanguagePair(e.target.value as LanguagePair)}
-          aria-label="회의 언어"
+          onChange={(v) => void setLanguagePair(v)}
+          ariaLabel="회의 언어"
           title={running ? '통역 중에는 회의 언어를 변경할 수 없습니다.' : '회의 언어'}
-        >
-          {LANGUAGE_PAIRS.map((lp) => (
-            <option key={lp.id} value={lp.id}>
-              {lp.label}
-            </option>
-          ))}
-        </select>
+          options={LANG_PAIR_OPTIONS}
+        />
 
         <LevelMeter />
 

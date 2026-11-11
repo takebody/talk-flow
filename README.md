@@ -29,11 +29,30 @@ npm run dev
 npm run build
 ```
 
-Windows 설치 패키지(NSIS + portable) 생성:
+## exe 배포본
+
+`exe 빌드.bat`을 더블 클릭하거나:
 
 ```bash
 npm run dist
 ```
+
+`release/` 폴더에 두 가지가 생성됩니다. **Node.js가 없는 PC에서도 실행됩니다.**
+
+| 파일 | 용도 |
+|---|---|
+| `Talk-Flow-0.1.0-Setup-x64.exe` | 설치 프로그램. 설치 경로 선택, 바탕화면·시작 메뉴 바로가기 생성 |
+| `Talk-Flow-0.1.0-Portable-x64.exe` | 무설치 실행본. 더블 클릭하면 바로 실행 (USB 배포용) |
+
+두 타깃이 같은 파일명으로 출력되어 서로 덮어쓰지 않도록 `nsis`·`portable` 각각에
+`artifactName`을 지정해 두었습니다. 아이콘은 `build/icon.ico`(빌드용)와
+`resources/icon.ico`(실행 중 창·작업 표시줄용)입니다.
+
+### 코드 서명
+
+현재는 서명하지 않습니다(`no signing info identified, signing is skipped`). 서명되지 않은
+exe는 처음 실행할 때 Windows SmartScreen이 **"Windows가 PC를 보호했습니다"** 경고를 띄웁니다.
+`추가 정보 → 실행`을 눌러야 실행됩니다. 사내 배포 시 코드 서명 인증서를 적용하면 사라집니다.
 
 ## 첫 사용
 
@@ -49,10 +68,12 @@ npm run dist
 
 | 키 | 동작 |
 |---|---|
-| `Ctrl+Enter` | 입력한 한국어 번역 |
+| `Enter` | 입력한 한국어 번역 |
+| `Ctrl+Enter` | 입력창 줄바꿈 |
 | `Enter` | 입력창 줄바꿈 |
 | `Ctrl+Shift+S` | 통역 시작 / 일시정지 |
 | `Ctrl+Shift+T` | 항상 위 토글 |
+| `Ctrl+Shift+M` | 저장된 회의록 목록 열기 |
 | `Ctrl+Shift+C` | 마지막 영어 번역문 복사 |
 | `Ctrl+,` | 설정 열기 |
 | `Esc` | 설정 닫기 |

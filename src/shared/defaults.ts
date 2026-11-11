@@ -1,4 +1,4 @@
-import type { LanguagePair, ProviderId, Settings, SttProviderId, VadSensitivity } from './types'
+import type { Lang, LanguagePair, ProviderId, Settings, SttProviderId, VadSensitivity } from './types'
 
 /** 지원하는 AI 제공자 전체 목록 (번역 기준) */
 export const PROVIDER_IDS: ProviderId[] = ['openai', 'gemini', 'anthropic']
@@ -13,10 +13,18 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 }
 
 /** 지원하는 회의 언어 쌍 목록 */
-export const LANGUAGE_PAIRS: { id: LanguagePair; label: string; partnerLabel: string }[] = [
-  { id: 'en-ko', label: '영어 ⇄ 한국어', partnerLabel: '영어' },
-  { id: 'ja-ko', label: '일본어 ⇄ 한국어', partnerLabel: '일본어' }
+export const LANGUAGE_PAIRS: {
+  id: LanguagePair
+  label: string
+  partnerLabel: string
+  /** [상대방 언어, 한국어] — 국기 표시용 */
+  langs: [Lang, Lang]
+}[] = [
+  { id: 'en-ko', label: '영어 ⇄ 한국어', partnerLabel: '영어', langs: ['en', 'ko'] },
+  { id: 'ja-ko', label: '일본어 ⇄ 한국어', partnerLabel: '일본어', langs: ['ja', 'ko'] }
 ]
+
+export const LANG_LABELS: Record<Lang, string> = { en: '영어', ko: '한국어', ja: '일본어' }
 
 export const IPC = {
   settingsGet: 'settings:get',
@@ -41,6 +49,10 @@ export const IPC = {
   minutesCurrent: 'minutes:current',
   minutesSaveAs: 'minutes:saveAs',
   minutesReveal: 'minutes:reveal',
+  minutesEmail: 'minutes:email',
+  minutesList: 'minutes:list',
+  minutesOpenSaved: 'minutes:openSaved',
+  minutesOpenFolder: 'minutes:openFolder',
   windowAlwaysOnTop: 'window:alwaysOnTop',
   windowResizeCompact: 'window:resizeCompact',
   appInfo: 'app:info',
@@ -65,6 +77,20 @@ export const VAD_MIN_UTTERANCE_MS = 500
 export const VAD_ONSET_FRAMES = 3
 export const MAX_INPUT_CHARS = 1000
 export const TRANSLATION_CONTEXT_ENTRIES = 6
+
+/** 수신인 문자열을 주소 목록으로 나눈다. 쉼표·세미콜론·공백 구분을 모두 받는다. */
+export function parseRecipients(raw: string): string[] {
+  return raw
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+const EMAIL_RE = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/
+
+export function isValidEmail(address: string): boolean {
+  return EMAIL_RE.test(address)
+}
 
 export function defaultSettings(): Settings {
   return {
@@ -116,6 +142,7 @@ export function defaultSettings(): Settings {
       autoSave: true,
       retentionDays: 30
     },
+    email: { recipients: '' },
     window: { width: 480, height: 760, x: undefined, y: undefined }
   }
 }

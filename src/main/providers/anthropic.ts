@@ -185,7 +185,9 @@ export const anthropicProvider: Provider = {
       if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
 
       const minutes = parseMinutesContent(text)
-      if (!minutes) return { ok: false, error: minutesParseError() }
+      if (!minutes) {
+        return { ok: false, error: minutesParseError(message.stop_reason === 'max_tokens', text) }
+      }
 
       return {
         ok: true,

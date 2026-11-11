@@ -117,6 +117,109 @@ export function renderMinutesAsText(m: Minutes): string {
   return lines.join('\r\n')
 }
 
+/* ------------------------------------------------------- 텍스트 역파싱 */
+
+/**
+ * `toLocaleString('ko-KR')` 결과("2026. 11. 11. 오후 3:04:05")를 ISO 문자열로 되돌린다.
+ * 형식이 다르면 null.
+ */
+export function parseKoreanDateTime(text: string): string | null {
+  const m = text.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?\s*(오전|오후)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (!m) return null
+  let hour = Number(m[5])
+  if (m[4] === '오후' && hour < 12) hour += 12
+  if (m[4] === '오전' && hour === 12) hour = 0
+  const d = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    hour,
+    Number(m[6]),
+    Number(m[7] ?? 0)
+  )
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+const PROVIDERS = ['openai', 'gemini', 'anthropic'] as const
+
+/**
+ * renderMinutesAsText()로 저장된 텍스트 파일을 회의록 구조로 되돌린다.
+ *
+ * 앱이 JSON 원본을 함께 보관하기 전에 만들어진 회의록을 다시 열기 위한 것이다.
+ * 형식이 맞지 않으면(사용자가 편집했거나 다른 파일이면) null을 돌려준다.
+ */
+export function parseMinutesText(
+  text: string,
+  fallback: { id: string; modifiedAt: string; path?: string }
+): Minutes | null {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/)
+  const titleLine = lines.find((l) => l.startsWith('회의록:'))
+  if (!titleLine) return null
+
+  const field = (label: string): string | undefined => {
+    const line = lines.find((l) => l.startsWith(label) && l.includes(':'))
+    return line?.slice(line.indexOf(':') + 1).trim()
+  }
+
+  // [섹션] 헤더 아래 줄들을 모은다. 구분선이나 다음 헤더에서 끝난다.
+  const sections = new Map<string, string[]>()
+  let currentSection: string | null = null
+  for (const line of lines) {
+    const header = line.match(/^\[(.+)\]$/)
+    if (header) {
+      currentSection = header[1]
+      sections.set(currentSection, [])
+    } else if (/^[-=]{10,}$/.test(line)) {
+      currentSection = null
+    } else if (currentSection && line.trim()) {
+      sections.get(currentSection)!.push(line)
+    }
+  }
+
+  const items = (name: string): string[] =>
+    (sections.get(name) ?? [])
+      .filter((l) => l.trim() !== '(없음)')
+      .map((l) => l.replace(/^\s*-\s?/, '').trim())
+      .filter(Boolean)
+
+  const summary = (sections.get('요약') ?? []).map((l) => l.trim()).join('\n')
+  if (!summary) return null
+
+  const actionItems = items('액션 아이템').map((raw) => {
+    const m = raw.match(/^(.*?)\s*\(((?:담당|기한):.*)\)$/)
+    if (!m) return { task: raw }
+    const owner = m[2].match(/담당:\s*([^,]+)/)?.[1].trim()
+    const due = m[2].match(/기한:\s*(.+)$/)?.[1].trim()
+    return { task: m[1].trim(), owner: owner || undefined, due: due || undefined }
+  })
+
+  const startedAt = parseKoreanDateTime(field('일시') ?? '') ?? fallback.modifiedAt
+  const endedAt = parseKoreanDateTime(field('종료') ?? '') ?? undefined
+  const generatedAt = parseKoreanDateTime(field('생성') ?? '') ?? fallback.modifiedAt
+  const [providerRaw, ...modelParts] = (field('모델') ?? '').split('/')
+  const provider = PROVIDERS.find((p) => p === providerRaw?.trim()) ?? 'gemini'
+  const entryCount = Number((field('발화 수') ?? '').replace(/[^\d]/g, '')) || 0
+
+  return {
+    sessionId: fallback.id,
+    title: titleLine.slice('회의록:'.length).trim() || '제목 없는 회의',
+    summary,
+    keyPoints: items('주요 논의'),
+    decisions: items('결정 사항'),
+    actionItems,
+    followUps: items('후속 확인 필요'),
+    generatedAt,
+    startedAt,
+    endedAt,
+    mode: field('형태')?.includes('오프라인') ? 'offline' : 'online',
+    entryCount,
+    provider,
+    model: modelParts.join('/').trim() || '알 수 없음',
+    savedPath: fallback.path,
+    truncated: lines.some((l) => l.includes('일부 구간을 생략한 채'))
+  }
+}
+
 /** 파일명에 쓸 수 없는 문자를 제거한다. */
 export function minutesFileName(m: Minutes): string {
   const stamp = m.startedAt.slice(0, 16).replace(/[:T]/g, '-')

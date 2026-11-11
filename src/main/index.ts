@@ -24,6 +24,8 @@ function createWindow(): void {
     show: false,
     backgroundColor: '#101216',
     title: 'Talk-Flow',
+    // 패키징본은 exe 아이콘을 쓰지만, 개발 실행과 작업 표시줄을 위해 지정한다.
+    icon: join(__dirname, '../../resources/icon.ico'),
     alwaysOnTop: settings.display.alwaysOnTop,
     autoHideMenuBar: true,
     webPreferences: {

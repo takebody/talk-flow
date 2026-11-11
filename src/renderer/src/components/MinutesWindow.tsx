@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import type { Minutes, Settings } from '@shared/types'
 import { renderMinutesAsText } from '@shared/minutes'
 import { PROVIDER_LABELS } from '@shared/defaults'
+import { ModeLabel } from './icons'
+import { isStaleBridge } from './ErrorBoundary'
 
 /**
  * 회의록 전용 창.
@@ -11,7 +13,6 @@ import { PROVIDER_LABELS } from '@shared/defaults'
  * 본체의 zustand 상태는 여기에 존재하지 않는다.
  */
 
-const MODE_LABEL = { online: '온라인 회의', offline: '오프라인 회의' } as const
 
 function Section({ title, items }: { title: string; items: string[] }): React.JSX.Element {
   return (
@@ -34,6 +35,7 @@ export function MinutesWindow(): React.JSX.Element {
   const [minutes, setMinutes] = useState<Minutes | null>(null)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     // index.html의 <title>이 창 제목을 덮어쓰므로 여기서 다시 지정한다.
@@ -59,15 +61,36 @@ export function MinutesWindow(): React.JSX.Element {
 
   // 알림은 잠깐만 보여 준다.
   useEffect(() => {
-    if (!toast) return
+    if (!toast || sending) return
     const timer = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(timer)
-  }, [toast])
+  }, [toast, sending])
 
   const onSaveAs = async () => {
     const result = await window.talkflow.minutes.saveAs()
     if (result.ok && result.path) setToast(`저장했습니다: ${result.path}`)
     else if (!result.canceled) setToast(`저장하지 못했습니다: ${result.message ?? '알 수 없는 오류'}`)
+  }
+
+  const onEmail = async () => {
+    if (sending) return
+    setSending(true)
+    setToast('메일을 보내고 있습니다…')
+    try {
+      const result = await window.talkflow.minutes.email()
+      if (!result.ok) setToast(result.message ?? '메일을 보내지 못했습니다.')
+      else if (result.method === 'outlook')
+        setToast(`메일을 보냈습니다: ${result.recipients?.join(', ')}`)
+      else setToast(result.message ?? '메일 작성 창을 열었습니다.')
+    } catch (err) {
+      setToast(
+        isStaleBridge(err)
+          ? '앱을 완전히 종료한 뒤 다시 실행해야 메일 기능이 적용됩니다.'
+          : `메일을 보내지 못했습니다: ${(err as Error)?.message ?? err}`
+      )
+    } finally {
+      setSending(false)
+    }
   }
 
   const onCopy = async () => {
@@ -106,6 +129,14 @@ export function MinutesWindow(): React.JSX.Element {
           <h1 className="minutes__title">{minutes.title}</h1>
         </div>
         <div className="minutes__actions">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => void onEmail()}
+            disabled={sending}
+          >
+            {sending ? '보내는 중…' : '메일 보내기'}
+          </button>
           <button type="button" className="btn" onClick={() => void onCopy()}>
             전문 복사
           </button>
@@ -140,7 +171,9 @@ export function MinutesWindow(): React.JSX.Element {
         )}
         <div>
           <dt>형태</dt>
-          <dd>{MODE_LABEL[minutes.mode]}</dd>
+          <dd>
+            <ModeLabel mode={minutes.mode} />
+          </dd>
         </div>
         <div>
           <dt>발화 수</dt>

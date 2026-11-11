@@ -28,14 +28,23 @@ import {
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 interface GenerateContentResponse {
-  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[]
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number }
+  candidates?: {
+    content?: { parts?: { text?: string; thought?: boolean }[] }
+    finishReason?: string
+  }[]
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    thoughtsTokenCount?: number
+  }
   promptFeedback?: { blockReason?: string }
 }
 
 function extractText(body: GenerateContentResponse): string {
   const parts = body.candidates?.[0]?.content?.parts ?? []
   return parts
+    // 추론 요약(thought) 파트가 섞여 오면 JSON 앞에 붙어 파싱을 깨뜨린다.
+    .filter((p) => !p.thought)
     .map((p) => p.text ?? '')
     .join('')
     .trim()
@@ -341,7 +350,12 @@ export const geminiProvider: Provider = {
         contents: [{ role: 'user', parts: [{ text: user }] }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 4096,
+          /*
+           * flash-latest 등 추론형 모델은 maxOutputTokens 안에서 추론 토큰을 먼저 쓴다.
+           * 4096으로는 긴 회의에서 추론만으로 한도가 차 JSON이 중간에 끊겼다.
+           * 실제 출력만큼만 과금되므로 한도는 넉넉히 둔다.
+           */
+          maxOutputTokens: 32768,
           // 스키마를 주면 코드 펜스 없이 순수 JSON으로 답한다.
           responseMimeType: 'application/json',
           responseSchema: {
@@ -384,10 +398,19 @@ export const geminiProvider: Provider = {
     }
 
     const text = extractText(body)
-    if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
+    if (!text) {
+      // 추론만으로 한도를 다 써 본문이 한 글자도 오지 않은 경우
+      if (body.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+        return { ok: false, error: minutesParseError(true) }
+      }
+      return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
+    }
 
     const minutes = parseMinutesContent(text)
-    if (!minutes) return { ok: false, error: minutesParseError() }
+    if (!minutes) {
+      const cut = body.candidates?.[0]?.finishReason === 'MAX_TOKENS'
+      return { ok: false, error: minutesParseError(cut, text) }
+    }
 
     return {
       ok: true,

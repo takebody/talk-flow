@@ -1,10 +1,11 @@
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
   CaptureMode,
   ConversationEntry,
+  MailSendResult,
   Minutes,
   ProviderId,
   Result,
@@ -23,12 +24,16 @@ import {
   updateSettings
 } from './settings'
 import * as sessions from './sessions'
+import { emailMinutes } from './mail'
 import {
   autoSaveMinutes,
   getCurrentMinutes,
+  listSavedMinutes,
+  loadSavedMinutes,
   minutesDir,
   openMinutesWindow,
-  setCurrentMinutes
+  setCurrentMinutes,
+  storeMinutesRecord
 } from './minutes'
 import {
   TestTarget,
@@ -228,12 +233,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
       }
 
       minutes.savedPath = (await autoSaveMinutes(minutes)) ?? undefined
+      await storeMinutesRecord(minutes)
       setCurrentMinutes(minutes)
       openMinutesWindow(getWindow())
 
       return { ok: true, value: minutes }
     }
   )
+
+  /** 저장된 회의록 목록 (최신순) */
+  ipcMain.handle(IPC.minutesList, () => listSavedMinutes())
+
+  /** 저장된 회의록을 회의록 창에 다시 띄운다. */
+  ipcMain.handle(IPC.minutesOpenSaved, async (_e, id: string) => {
+    const minutes = await loadSavedMinutes(id)
+    if (!minutes) return { ok: false, message: '회의록을 찾을 수 없거나 형식을 읽을 수 없습니다.' }
+    setCurrentMinutes(minutes)
+    openMinutesWindow(getWindow())
+    return { ok: true }
+  })
+
+  /** 회의록 저장 폴더를 탐색기로 연다. */
+  ipcMain.handle(IPC.minutesOpenFolder, async () => {
+    await mkdir(minutesDir(), { recursive: true })
+    return shell.openPath(minutesDir())
+  })
 
   /** 회의록 창이 표시할 내용을 읽어 가는 채널 */
   ipcMain.handle(IPC.minutesCurrent, () => getCurrentMinutes())
@@ -263,6 +287,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     if (!path) return false
     shell.showItemInFolder(path)
     return true
+  })
+
+  /** 설정에 저장한 기본 수신인에게 현재 회의록을 메일로 보낸다. */
+  ipcMain.handle(IPC.minutesEmail, async (): Promise<MailSendResult> => {
+    const minutes = getCurrentMinutes()
+    if (!minutes) return { ok: false, message: '보낼 회의록이 없습니다.' }
+    return emailMinutes(minutes, getSettings().email.recipients)
   })
 
   /* ------------------------------------------------------------- 창/시스템 */

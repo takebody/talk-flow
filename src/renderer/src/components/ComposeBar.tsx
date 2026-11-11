@@ -5,12 +5,9 @@ import { useStore } from '../store'
 export function ComposeBar(): React.JSX.Element {
   const submitText = useStore((s) => s.submitText)
   const busy = useStore((s) => s.busyCount > 0)
-  const languagePair = useStore((s) => s.settings.languagePair)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
-
-  const partnerLabel = languagePair === 'ja-ko' ? '일본어' : '영어'
 
   const send = async () => {
     const value = text.trim()
@@ -26,11 +23,27 @@ export function ComposeBar(): React.JSX.Element {
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter는 줄바꿈, Ctrl+Enter가 번역 (FR-12)
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    if (event.key !== 'Enter') return
+    // 한글 IME 조합 중의 Enter는 글자 확정용이므로 건드리지 않는다.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+
+    // Ctrl+Enter(또는 Shift+Enter)는 줄바꿈, Enter는 번역
+    if (event.ctrlKey || event.metaKey) {
       event.preventDefault()
-      void send()
+      const area = event.currentTarget
+      const start = area.selectionStart
+      const end = area.selectionEnd
+      const next = `${text.slice(0, start)}\n${text.slice(end)}`
+      setText(next)
+      requestAnimationFrame(() => {
+        area.selectionStart = area.selectionEnd = start + 1
+      })
+      return
     }
+    if (event.shiftKey) return // 기본 동작(줄바꿈)
+
+    event.preventDefault()
+    if (text.length <= MAX_INPUT_CHARS) void send()
   }
 
   const over = text.length > MAX_INPUT_CHARS
@@ -40,7 +53,7 @@ export function ComposeBar(): React.JSX.Element {
       <textarea
         ref={areaRef}
         className="compose__input"
-        placeholder={`한국어를 입력하세요 — Ctrl+Enter 로 ${partnerLabel} 번역`}
+        placeholder="한국어를 입력하세요 — Enter 로 번역, Ctrl+Enter 로 줄바꿈"
         value={text}
         rows={2}
         onChange={(e) => setText(e.target.value)}

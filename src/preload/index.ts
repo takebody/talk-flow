@@ -6,9 +6,11 @@ import type {
   CaptureMode,
   ConversationEntry,
   CredentialStatus,
+  MailSendResult,
   Minutes,
   ProviderId,
   Result,
+  SavedMinutesMeta,
   SessionMeta,
   SessionRecord,
   SessionUsage,
@@ -91,7 +93,15 @@ const api = {
       message?: string
       canceled?: boolean
     }> => ipcRenderer.invoke(IPC.minutesSaveAs),
-    reveal: (): Promise<boolean> => ipcRenderer.invoke(IPC.minutesReveal)
+    reveal: (): Promise<boolean> => ipcRenderer.invoke(IPC.minutesReveal),
+    /** 설정의 기본 수신인에게 메일 발송 */
+    email: (): Promise<MailSendResult> => ipcRenderer.invoke(IPC.minutesEmail),
+    /** 저장된 회의록 목록 (최신순) */
+    list: (): Promise<SavedMinutesMeta[]> => ipcRenderer.invoke(IPC.minutesList),
+    /** 저장된 회의록을 회의록 창에 띄운다. */
+    openSaved: (id: string): Promise<{ ok: boolean; message?: string }> =>
+      ipcRenderer.invoke(IPC.minutesOpenSaved, id),
+    openFolder: (): Promise<string> => ipcRenderer.invoke(IPC.minutesOpenFolder)
   },
 
   window: {

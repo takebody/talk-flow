@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { IconSelect } from './IconSelect'
+import { LangPairLabel, ModeLabel } from './icons'
 import type {
   AppInfo,
+  CaptureMode,
   DiagnosticsItem,
   LanguagePair,
   ModelInfo,
@@ -8,7 +11,7 @@ import type {
   SessionMeta,
   SttProviderId
 } from '@shared/types'
-import { LANGUAGE_PAIRS } from '@shared/defaults'
+import { LANGUAGE_PAIRS, isValidEmail, parseRecipients } from '@shared/defaults'
 import { validateApiKey } from '@shared/apiKey'
 import { useStore } from '../store'
 import {
@@ -557,28 +560,27 @@ function AudioSection(): React.JSX.Element {
         label="기본 회의 언어"
         hint="통역할 언어 쌍을 선택합니다. 메인 화면 상태 바에서도 언제든지 변경할 수 있습니다."
       >
-        <select
-          className="select"
+        <IconSelect<LanguagePair>
           value={settings.languagePair ?? 'en-ko'}
-          onChange={(e) => void patchSettings({ languagePair: e.target.value as LanguagePair })}
-        >
-          {LANGUAGE_PAIRS.map((lp) => (
-            <option key={lp.id} value={lp.id}>
-              {lp.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => void patchSettings({ languagePair: v })}
+          ariaLabel="기본 회의 언어"
+          options={LANGUAGE_PAIRS.map((lp) => ({
+            value: lp.id,
+            label: <LangPairLabel pair={lp.id} />
+          }))}
+        />
       </Field>
 
       <Field label="기본 통역 모드">
-        <select
-          className="select"
+        <IconSelect<CaptureMode>
           value={audio.defaultMode}
-          onChange={(e) => setAudio({ defaultMode: e.target.value as 'online' | 'offline' })}
-        >
-          <option value="online">온라인 회의 (시스템 오디오 캡처)</option>
-          <option value="offline">오프라인 회의 (마이크 캡처)</option>
-        </select>
+          onChange={(v) => setAudio({ defaultMode: v })}
+          ariaLabel="기본 통역 모드"
+          options={[
+            { value: 'online', label: <ModeLabel mode="online" suffix="(시스템 오디오 캡처)" /> },
+            { value: 'offline', label: <ModeLabel mode="offline" suffix="(마이크 캡처)" /> }
+          ]}
+        />
       </Field>
 
       <Field
@@ -850,6 +852,8 @@ function HistorySection(): React.JSX.Element {
         </select>
       </Field>
 
+      <RecipientField />
+
       <Field label={`저장된 세션 (${sessionList.length})`}>
         {sessionList.length === 0 ? (
           <p className="muted">저장된 세션이 없습니다.</p>
@@ -901,6 +905,57 @@ function HistorySection(): React.JSX.Element {
   )
 }
 
+/** 회의록 창의 "메일 보내기" 버튼이 쓰는 기본 수신인 */
+function RecipientField(): React.JSX.Element {
+  const saved = useStore((s) => s.settings.email.recipients)
+  const patchSettings = useStore((s) => s.patchSettings)
+  const [draft, setDraft] = useState(saved)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => setDraft(saved), [saved])
+
+  const commit = async () => {
+    const list = parseRecipients(draft)
+    const invalid = list.filter((a) => !isValidEmail(a))
+    if (invalid.length > 0) {
+      setStatus({ ok: false, text: `올바르지 않은 주소: ${invalid.join(', ')}` })
+      return
+    }
+    const normalized = list.join('; ')
+    setDraft(normalized)
+    if (normalized === saved) return
+    await patchSettings({ email: { recipients: normalized } })
+    setStatus({
+      ok: true,
+      text: list.length > 0 ? `${list.length}명에게 발송하도록 저장했습니다.` : '수신인을 비웠습니다.'
+    })
+  }
+
+  return (
+    <Field
+      label="회의록 메일 수신인"
+      hint="회의록 창의 '메일 보내기'를 누르면 이 주소로 Outlook을 통해 바로 발송합니다. 여러 명은 쉼표(,) 또는 세미콜론(;)으로 구분하세요."
+    >
+      <input
+        type="text"
+        className="input"
+        placeholder="name@example.com; team@example.com"
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setStatus(null)
+        }}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void commit()
+        }}
+        spellCheck={false}
+      />
+      {status && <span className={`result ${status.ok ? 'is-ok' : 'is-bad'}`}>{status.text}</span>}
+    </Field>
+  )
+}
+
 function SessionRow({
   meta,
   onExport,
@@ -918,7 +973,7 @@ function SessionRow({
       <div className="sessions__info">
         <strong>{started.toLocaleString('ko-KR')}</strong>
         <span className="muted">
-          {meta.mode === 'online' ? '온라인' : '오프라인'} · {meta.entryCount}개 항목 ·{' '}
+          <ModeLabel mode={meta.mode} short /> · {meta.entryCount}개 항목 ·{' '}
           {(meta.usage.audioSeconds / 60).toFixed(1)}분
           {!meta.endedAt && ' · 진행 중'}
         </span>

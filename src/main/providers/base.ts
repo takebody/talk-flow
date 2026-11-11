@@ -409,22 +409,122 @@ function stringList(value: unknown): string[] {
 }
 
 /**
+ * 깨진 JSON을 최대한 살린다.
+ *
+ * - 문자열 안의 날것 줄바꿈·탭을 이스케이프한다 (일부 모델이 그대로 내보낸다).
+ * - `}`/`]` 앞의 꼬리 쉼표를 지운다.
+ * - 출력 토큰 한도로 응답이 중간에 끊기면, 끊긴 문자열을 닫고 미완성 키를 버린 뒤
+ *   열린 괄호를 역순으로 닫는다.
+ *
+ * 반환값의 truncated는 끝이 잘려 있어 괄호를 보충했는지 여부다.
+ */
+export function repairJson(text: string): { json: string; truncated: boolean } {
+  let out = ''
+  const stack: string[] = []
+  let inString = false
+  let escaped = false
+  let closedAt = -1
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        out += ch
+      } else if (ch === '\\') {
+        escaped = true
+        out += ch
+      } else if (ch === '"') {
+        inString = false
+        out += ch
+      } else if (ch === '\n') out += '\\n'
+      else if (ch === '\r') out += '\\r'
+      else if (ch === '\t') out += '\\t'
+      else out += ch
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      out += ch
+    } else if (ch === '{' || ch === '[') {
+      stack.push(ch === '{' ? '}' : ']')
+      out += ch
+    } else if (ch === '}' || ch === ']') {
+      out = out.replace(/,\s*$/, '')
+      stack.pop()
+      out += ch
+      if (stack.length === 0) {
+        closedAt = i
+        break // 최상위 객체가 닫혔다. 뒤에 붙은 설명은 버린다.
+      }
+    } else {
+      out += ch
+    }
+  }
+
+  if (closedAt >= 0) return { json: out, truncated: false }
+
+  // 여기부터는 응답이 끝까지 오지 않은 경우다.
+  if (escaped) out = out.slice(0, -1)
+  if (inString) out += '"'
+  out = out.replace(/\s+$/, '')
+  // 값이 오지 않은 키를 버린다: `"key":`
+  out = out.replace(/,?\s*"(?:[^"\\]|\\.)*"\s*:\s*$/, '')
+  // 객체 안에서 `{` 또는 `,` 바로 뒤의 문자열은 값이 아니라 콜론이 오기 전에 끊긴 키다.
+  // (배열 안의 문자열은 값이므로 그대로 둔다.)
+  if (stack[stack.length - 1] === '}') {
+    const dangling = out.match(/([{,])\s*"(?:[^"\\]|\\.)*"$/)
+    if (dangling) out = out.slice(0, out.length - dangling[0].length + 1)
+  }
+  out = out.replace(/[,:]\s*$/, '')
+  // 숫자·true 등이 잘린 경우의 반쪽 리터럴
+  out = out.replace(/,?\s*(?:tru|tr|t|fals|fal|fa|f|nul|nu|n|-)$/, '')
+  while (stack.length > 0) out += stack.pop()
+  return { json: out, truncated: true }
+}
+
+/** 응답 앞의 설명·코드 펜스를 걷어내고 첫 `{`부터 돌려준다. */
+function stripToJson(raw: string): string | null {
+  const unfenced = raw.replace(/```(?:json|JSON)?/g, '')
+  const start = unfenced.indexOf('{')
+  return start < 0 ? null : unfenced.slice(start)
+}
+
+const PARTIAL_NOTICE = '(AI 응답이 중간에 끊겨 일부 항목이 누락되었을 수 있습니다. 원본 대화록과 대조하세요.)'
+
+/**
  * 모델 응답에서 회의록 JSON을 뽑아낸다.
  *
- * JSON만 달라고 지시해도 코드 펜스나 앞뒤 설명을 붙이는 모델이 있으므로
- * 첫 `{` 부터 마지막 `}` 까지를 잘라 파싱한다.
+ * JSON만 달라고 지시해도 코드 펜스나 앞뒤 설명을 붙이는 모델이 있고, 추론형 모델은
+ * 출력 한도에 걸려 JSON이 중간에 끊기기도 한다. 그대로 파싱해 보고, 실패하면
+ * 복구해서 다시 파싱한다. 끊긴 응답에서 살린 경우 후속 확인 항목에 그 사실을 남긴다.
  */
 export function parseMinutesContent(raw: string): MinutesContent | null {
-  const start = raw.indexOf('{')
-  const end = raw.lastIndexOf('}')
-  if (start < 0 || end <= start) return null
+  const body = stripToJson(raw)
+  if (!body) return null
 
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>
-  } catch {
-    return null
+  let parsed: Record<string, unknown> | null = null
+  let partial = false
+
+  const end = body.lastIndexOf('}')
+  if (end > 0) {
+    try {
+      parsed = JSON.parse(body.slice(0, end + 1)) as Record<string, unknown>
+    } catch {
+      parsed = null
+    }
   }
+  if (!parsed) {
+    const repaired = repairJson(body)
+    try {
+      parsed = JSON.parse(repaired.json) as Record<string, unknown>
+      partial = repaired.truncated
+    } catch {
+      return null
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
 
   const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
   const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
@@ -449,17 +549,33 @@ export function parseMinutesContent(raw: string): MinutesContent | null {
     keyPoints: stringList(parsed.keyPoints),
     decisions: stringList(parsed.decisions),
     actionItems,
-    followUps: stringList(parsed.followUps)
+    followUps: partial
+      ? [...stringList(parsed.followUps), PARTIAL_NOTICE]
+      : stringList(parsed.followUps)
   }
 }
 
-/** 모델이 JSON을 주지 않았을 때의 공통 오류. */
-export function minutesParseError(): AiError {
-  return fail(
-    'BAD_REQUEST',
-    '회의록 응답을 해석할 수 없습니다.',
-    '모델이 JSON 형식으로 답하지 않았습니다. 다시 시도하거나 설정에서 다른 모델을 선택하세요.'
-  )
+/**
+ * 모델이 쓸 수 있는 JSON을 주지 않았을 때의 공통 오류.
+ *
+ * @param truncated 제공자가 출력 한도 때문에 응답을 끊었다고 알려 준 경우
+ * @param raw       진단용으로 로그에 남길 원문 (화면에는 앞부분만 보여 준다)
+ */
+export function minutesParseError(truncated = false, raw?: string): AiError {
+  if (raw) console.warn('[minutes] 해석 실패한 응답 (앞 500자):', raw.slice(0, 500))
+  const error = truncated
+    ? fail(
+        'BAD_REQUEST',
+        '회의록 응답이 출력 한도에 걸려 끊겼습니다.',
+        '회의가 매우 길거나 모델이 추론에 토큰을 많이 썼습니다. 다시 시도하거나 설정에서 다른 모델을 선택하세요.'
+      )
+    : fail(
+        'BAD_REQUEST',
+        '회의록 응답을 해석할 수 없습니다.',
+        '모델이 JSON 형식으로 답하지 않았습니다. 다시 시도하거나 설정에서 다른 모델을 선택하세요.'
+      )
+  if (raw) error.detail = raw.slice(0, 200)
+  return error
 }
 
 export const STT_PROMPT_EN =

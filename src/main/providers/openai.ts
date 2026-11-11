@@ -27,7 +27,7 @@ import {
 } from './base'
 
 interface ChatCompletion {
-  choices?: { message?: { content?: string } }[]
+  choices?: { message?: { content?: string }; finish_reason?: string }[]
   usage?: { prompt_tokens?: number; completion_tokens?: number }
 }
 
@@ -175,7 +175,10 @@ export function makeOpenAiCompatible(config: {
       if (!text) return { ok: false, error: fail('EMPTY', '회의록 결과가 비어 있습니다.') }
 
       const minutes = parseMinutesContent(text)
-      if (!minutes) return { ok: false, error: minutesParseError() }
+      if (!minutes) {
+        const cut = body.choices?.[0]?.finish_reason === 'length'
+        return { ok: false, error: minutesParseError(cut, text) }
+      }
 
       return {
         ok: true,

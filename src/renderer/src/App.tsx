@@ -49,6 +49,11 @@ export function App(): React.JSX.Element {
         else void store.start()
         return
       }
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault()
+        store.openMinutesMenu(!store.minutesMenuOpen)
+        return
+      }
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault()
         const next = !store.settings.display.alwaysOnTop
