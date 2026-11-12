@@ -201,7 +201,19 @@ export const useStore = create<State>((set, get) => {
       )
       set({ sessionList })
     }
-    set({ status: 'idle', session: null, level: 0, speaking: false })
+    // 통역 종료 시 화면을 초기 상태로 되돌린다. 회의록에 필요한 항목은
+    // 위에서 이미 꺼내 두었으므로 여기서 비워도 된다.
+    set({
+      status: 'idle',
+      session: null,
+      level: 0,
+      speaking: false,
+      entries: [],
+      participants: [],
+      selectedSpeakerId: null,
+      usage: emptyUsage(),
+      latencies: []
+    })
     return { session, entries, endedAt, mode }
   }
 
@@ -456,6 +468,8 @@ export const useStore = create<State>((set, get) => {
     }
 
     if (!transcript) return
+    // 응답을 기다리는 동안 통역이 종료되어 화면이 초기화됐다. 참석자를 되살리지 않는다.
+    if (!get().entries.some((e) => e.id === id)) return
 
     const routed = route(transcript, detected, pair)
     const { participant, resolvedProfile } = resolveParticipant(
