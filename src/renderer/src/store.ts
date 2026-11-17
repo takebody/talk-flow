@@ -438,7 +438,10 @@ export const useStore = create<State>((set, get) => {
           set({ banner: bannerFromError(result.error) })
           persist(id)
           // 일일 한도를 소진했으면 캡처를 멈춘다. 계속 두면 실패 항목만 쌓인다.
-          if (result.error.quotaScope === 'day') void get().pause()
+          // 크레딧 소진(BILLING)도 기다려서 복구되지 않으므로 마찬가지로 멈춘다.
+          if (result.error.quotaScope === 'day' || result.error.code === 'BILLING') {
+            void get().pause()
+          }
         }
         return
       }

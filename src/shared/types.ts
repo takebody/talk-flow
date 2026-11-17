@@ -23,6 +23,7 @@ export type AiErrorCode =
   | 'NOT_CONFIGURED'
   | 'AUTH'
   | 'QUOTA'
+  | 'BILLING'
   | 'NOT_FOUND'
   | 'BAD_REQUEST'
   | 'NETWORK'

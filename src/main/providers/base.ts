@@ -194,6 +194,17 @@ export function normalizeHttpError(
       fail('AUTH', 'API 인증에 실패했습니다.', 'API Key가 올바른지 설정에서 확인하세요.', status)
     )
   }
+  if (status === 402) {
+    // 선불 크레딧 소진·결제 수단 문제. 기다리거나 재시도해도 복구되지 않는다.
+    return withDetail(
+      fail(
+        'BILLING',
+        'AI 제공자의 크레딧 또는 결제 한도를 모두 소진했습니다.',
+        '제공자 콘솔(예: Gemini는 AI Studio의 Billing)에서 크레딧을 충전하거나 설정에서 다른 제공자로 전환하세요.',
+        status
+      )
+    )
+  }
   if (status === 429) return withDetail(parseQuotaError(body, status))
   if (status === 404) {
     return withDetail(
